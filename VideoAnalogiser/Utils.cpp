@@ -7,8 +7,9 @@
 
 #define _USE_MATH_DEFINES
 #include <math.h>
-#include <ppl.h>
+#include <memory>
 #include "Utils.h"
+#include <omp.h>
 
 #define FILTER_MAKE_INTEGRAL_POINTS 16384
 #define FILTER_MAKE_INTEGRAL_POINTS_DBL 16384.0
@@ -140,15 +141,25 @@ SignalPack ApplyFIRFilter(SignalPack signal, FIRFilter fir)
         output[i] = outsig;
     }
 
+    const int parStart = fir.len;
+    const int parEnd = signal.len - fir.backport;
+    const int filtStart = -fir.backport;
+    const int filtEnd = fir.len;
+    const double* const sig = signal.signal;
+    const double* const filt = fir.filter;
+
     //Main loop. This is embarrasingly parallel
-    concurrency::parallel_for(fir.len, signal.len - fir.backport, [&](int i) {
+    omp_set_num_threads(omp_get_max_threads());
+    #pragma omp parallel for shared(sig, filt, output, filtStart, filtEnd)
+    for (int i = parStart; i < parEnd; i++)
+    {
         double outsigin = 0.0;
-        for (int j = -fir.backport; j < fir.len; j++)
+        for (int j = filtStart; j < filtEnd; j++)
         {
-            outsigin += signal.signal[i - j] * fir.filter[j];
+            outsigin += sig[i - j] * filt[j];
         }
         output[i] = outsigin;
-        }, concurrency::static_partitioner());
+    }
 
     for (int i = signal.len - fir.backport; i < signal.len; i++) //Ease out
     {

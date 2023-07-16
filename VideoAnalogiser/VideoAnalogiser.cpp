@@ -5,6 +5,7 @@
 * This software uses code of FFmpeg (http://ffmpeg.org) licensed under the LGPLv2.1 (http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html)
 */
 
+#include <omp.h>
 #include "VideoAnalogiser.h"
 #include "ConversionEngine.h"
 
@@ -223,6 +224,7 @@ int main(int argc, char** argv)
 	std::cout << "Encoding to: " << bSysStr << " " << cSysStr << std::endl;
 	std::cout << "Initialising engine..." << std::endl;
 	ConversionEngine convEng = ConversionEngine(bSys, cSys, dResonance, pWidthMult);
+	omp_set_dynamic(true);
 	convEng.OpenForDecodeVideo(argv[1]);
 	std::cout << "Begin encoding." << std::endl;
 	convEng.EncodeVideo(argv[2], preview, kbitrate, noise, globalPhaseNoise, crosstalk, phaseNoise, jitter);

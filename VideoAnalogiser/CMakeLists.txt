@@ -9,6 +9,8 @@ if (CMAKE_VERSION VERSION_GREATER 3.12)
   set_property(TARGET VideoAnalogiser PROPERTY CXX_STANDARD 20)
 endif()
 
+set_property(TARGET VideoAnalogiser PROPERTY COMPILE_OPTIONS -openmp)
+
 # TODO: Add tests and install targets if needed.
 
 target_link_libraries (VideoAnalogiser PUBLIC "${PROJECT_SOURCE_DIR}/lib/avcodec.lib")
