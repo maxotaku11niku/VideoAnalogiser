@@ -13,7 +13,6 @@ if (MSVC)
   set_property(TARGET VideoAnalogiser PROPERTY COMPILE_OPTIONS -openmp)
 else()
   set_property(TARGET VideoAnalogiser PROPERTY COMPILE_OPTIONS -fopenmp)
-  set_property(TARGET VideoAnalogiser PROPERTY LINK_OPTIONS -lgomp)
 endif()
 
 # TODO: Add tests and install targets if needed.
