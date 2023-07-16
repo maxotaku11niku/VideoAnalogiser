@@ -13,6 +13,7 @@ if (MSVC)
   set_property(TARGET VideoAnalogiser PROPERTY COMPILE_OPTIONS -openmp)
 else()
   set_property(TARGET VideoAnalogiser PROPERTY COMPILE_OPTIONS -fopenmp)
+  target_link_libraries (VideoAnalogiser PUBLIC "${CMAKE_FIND_LIBRARY_PREFIXES}/libgomp")
 endif()
 
 # TODO: Add tests and install targets if needed.
