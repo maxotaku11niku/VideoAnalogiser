@@ -36,7 +36,7 @@ ConversionEngine::ConversionEngine(BroadcastSystems bSys, ColourSystems cSys, do
 	alreadyOpen = false;
 	outHeight = analogueEnc->bcParams->videoScanlines;
 	int vsc = analogueEnc->bcParams->videoScanlines;
-	analogueFrameBuffer = new int[vsc * vsc * (8.0/3.0)];
+	analogueFrameBuffer = new int[(int)(vsc * vsc * (8.0/3.0))];
 }
 
 //Sets up our converter upon loading a video file
