@@ -7,7 +7,7 @@
 
 #define _USE_MATH_DEFINES
 #include <math.h>
-#include <memory>
+#include <cstring>
 #include "Utils.h"
 #include <omp.h>
 
