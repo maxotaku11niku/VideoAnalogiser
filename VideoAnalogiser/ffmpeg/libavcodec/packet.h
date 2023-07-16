@@ -24,13 +24,13 @@
 #include <stddef.h>
 #include <stdint.h>
 
-#include "ffmpeg/libavutil/attributes.h"
-#include "ffmpeg/libavutil/buffer.h"
-#include "ffmpeg/libavutil/dict.h"
-#include "ffmpeg/libavutil/rational.h"
-#include "ffmpeg/libavutil/version.h"
+#include "../libavutil/attributes.h"
+#include "../libavutil/buffer.h"
+#include "../libavutil/dict.h"
+#include "../libavutil/rational.h"
+#include "../libavutil/version.h"
 
-#include "ffmpeg/libavcodec/version_major.h"
+#include "version_major.h"
 
 /**
  * @defgroup lavc_packet AVPacket

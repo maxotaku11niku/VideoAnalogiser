@@ -24,7 +24,7 @@
  * swscale version macros
  */
 
-#include "ffmpeg/libavutil/version.h"
+#include "../libavutil/version.h"
 
 #include "version_major.h"
 

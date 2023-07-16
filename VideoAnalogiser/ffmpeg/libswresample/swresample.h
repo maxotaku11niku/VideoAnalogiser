@@ -121,16 +121,16 @@
  */
 
 #include <stdint.h>
-#include "ffmpeg/libavutil/channel_layout.h"
-#include "ffmpeg/libavutil/frame.h"
-#include "ffmpeg/libavutil/samplefmt.h"
+#include "../libavutil/channel_layout.h"
+#include "../libavutil/frame.h"
+#include "../libavutil/samplefmt.h"
 
-#include "ffmpeg/libswresample/version_major.h"
+#include "version_major.h"
 #ifndef HAVE_AV_CONFIG_H
 /* When included as part of the ffmpeg build, only include the major version
  * to avoid unnecessary rebuilds. When included externally, keep including
  * the full version information. */
-#include "ffmpeg/libswresample/version.h"
+#include "version.h"
 #endif
 
 /**

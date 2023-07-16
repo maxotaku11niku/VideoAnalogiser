@@ -29,11 +29,11 @@
 #include <stdint.h>
 #include <stdio.h>
 
-#include "ffmpeg/libavutil/attributes.h"
-#include "ffmpeg/libavutil/dict.h"
-#include "ffmpeg/libavutil/log.h"
+#include "../libavutil/attributes.h"
+#include "../libavutil/dict.h"
+#include "../libavutil/log.h"
 
-#include "ffmpeg/libavformat/version_major.h"
+#include "version_major.h"
 
 /**
  * Seeking works like for a local file.

@@ -23,10 +23,10 @@
 
 #include <stdint.h>
 
-#include "ffmpeg/libavutil/avutil.h"
-#include "ffmpeg/libavutil/channel_layout.h"
-#include "ffmpeg/libavutil/rational.h"
-#include "ffmpeg/libavutil/pixfmt.h"
+#include "../libavutil/avutil.h"
+#include "../libavutil/channel_layout.h"
+#include "../libavutil/rational.h"
+#include "../libavutil/pixfmt.h"
 
 #include "codec_id.h"
 

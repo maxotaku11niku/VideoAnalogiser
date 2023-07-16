@@ -27,15 +27,15 @@
  * Libavcodec external API header
  */
 
-#include "ffmpeg/libavutil/samplefmt.h"
-#include "ffmpeg/libavutil/attributes.h"
-#include "ffmpeg/libavutil/avutil.h"
-#include "ffmpeg/libavutil/buffer.h"
-#include "ffmpeg/libavutil/dict.h"
-#include "ffmpeg/libavutil/frame.h"
-#include "ffmpeg/libavutil/log.h"
-#include "ffmpeg/libavutil/pixfmt.h"
-#include "ffmpeg/libavutil/rational.h"
+#include "../libavutil/samplefmt.h"
+#include "../libavutil/attributes.h"
+#include "../libavutil/avutil.h"
+#include "../libavutil/buffer.h"
+#include "../libavutil/dict.h"
+#include "../libavutil/frame.h"
+#include "../libavutil/log.h"
+#include "../libavutil/pixfmt.h"
+#include "../libavutil/rational.h"
 
 #include "codec.h"
 #include "codec_desc.h"
