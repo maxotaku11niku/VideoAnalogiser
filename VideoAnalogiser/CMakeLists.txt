@@ -11,8 +11,8 @@ endif()
 
 if (MSVC)
   set_property(TARGET VideoAnalogiser PROPERTY COMPILE_OPTIONS -openmp)
-else()
-  set_property(TARGET VideoAnalogiser PROPERTY COMPILE_OPTIONS --openmp)
+elseif (CMAKE_COMPILER_IS_GNUCXX)
+  set_property(TARGET VideoAnalogiser PROPERTY COMPILE_OPTIONS -fopenmp)
 endif()
 
 # TODO: Add tests and install targets if needed.
