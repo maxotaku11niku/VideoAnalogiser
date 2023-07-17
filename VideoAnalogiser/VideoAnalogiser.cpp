@@ -35,7 +35,11 @@ int main(int argc, char** argv)
 	std::cout << "VideoAnalogiser - Command Line Utility for Analogising Digital Videos" << std::endl;
 	std::cout << "Version 0.8" << std::endl;
 	std::cout << "Ideal for faking the past :)" << std::endl;
-	std::cout << "Maxim Hoxha 2023" << std::endl << std::endl;
+	std::cout << "Copyright (C) 2023 Maxim Hoxha" << std::endl << std::endl;
+	std::cout << "This program is free software: you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation, either version 3 of the License, or (at your option) any later version." << std::endl;
+	std::cout << "This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for more details." << std::endl;
+	std::cout << "You should have received a copy of the GNU General Public License along with this program. If not, see < https://www.gnu.org/licenses/>." << std::endl;
+
 	BroadcastSystems iSys;
 	//Note: strcmp returns 0 (=false) if the strings match, so we NOT it to get 1 if the strings match (=true)
 	if (argc < 2 || !strcmp(argv[1], "-h"))
