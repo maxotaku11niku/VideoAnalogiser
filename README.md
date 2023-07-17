@@ -2,7 +2,7 @@
 **Command Line Utility for Analogising Digital Videos**
 
 # About the program
-**VideoAnalogiser** is a command line application using libav\* that makes videos look analoguey by simulating the actual signal. It is essentially an extension to AnalogueConvertEffect, and probably quite overkill but it does work very well. All 3 colour formats (PAL, NTSC and SECAM) are supported, and pretty much all signal formats are supported as well (though in practice, there is little difference between most of them). You can also simulate VHS, but tape-specific artifacts are not yet supported. But in any case you can experience the nostalgia in **moving images!**
+**VideoAnalogiser** is a command line application using libav\* that makes videos look analoguey by simulating the actual signal. It is essentially an extension to [AnalogueConvertEffect](https://github.com/maxotaku11niku/AnalogueConvertEffect), and probably quite overkill but it does work very well. All 3 colour formats (PAL, NTSC and SECAM) are supported, and pretty much all signal formats are supported as well (though in practice, there is little difference between most of them). You can also simulate VHS, but tape-specific artifacts are not yet supported. But in any case you can experience the nostalgia in **moving images!**
 
 The source code for the particular version of the FFmpeg libraries (libav\*) I used is available here: (https://github.com/FFmpeg/FFmpeg/commit/eacfcbae69)
 
