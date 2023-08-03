@@ -8,6 +8,7 @@
 #pragma once
 #include <random>
 #include "ColourSystem.h"
+#include "MultiOctaveNoiseGen.h"
 
 #define SUBCARRIER_START_TIME 0.4e-6
 
@@ -22,12 +23,13 @@ const double YDbDrtoRGBConversionMatrix[9] = { 1.0,  0.0,               -0.52591
 class SECAMSystem : public ColourSystem
 {
 public:
-    SECAMSystem(BroadcastSystems sys, bool interlace, double resonance, double prefilterMult);
+    SECAMSystem(BroadcastSystems sys, bool interlace, double resonance, double prefilterMult, double phaseNoise, double scanlineJitter, double noiseExponent);
 
     virtual SignalPack Encode(FrameData imgdat, int interlaceField) override;
-    virtual FrameData Decode(SignalPack signal, int interlaceField, double crosstalk, double phaseError, double phaseNoise, double scanlineJitter) override;
+    virtual FrameData Decode(SignalPack signal, int interlaceField, double crosstalk) override;
 private:
-    std::mt19937_64 rng;
+    MultiOctaveNoiseGen* jitGen;
+    MultiOctaveNoiseGen* phNoiseGen;
     bool interlaced;
     int fieldScanlines;
     int activeWidth;

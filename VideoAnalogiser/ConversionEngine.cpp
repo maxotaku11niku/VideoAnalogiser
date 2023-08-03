@@ -15,20 +15,20 @@ extern "C"
 #include "ffmpeg/libavutil/opt.h"
 }
 
-ConversionEngine::ConversionEngine(BroadcastSystems bSys, ColourSystems cSys, double resonance, double prefilterMult)
+ConversionEngine::ConversionEngine(BroadcastSystems bSys, ColourSystems cSys, double resonance, double prefilterMult, double phaseNoise, double scanlineJitter, double noiseExponent)
 {
 	//Assumes interlacing for now.
 	switch (cSys)
 	{
 	default:
 	case ColourSystems::PAL:
-		analogueEnc = new PALSystem(bSys, true, resonance, prefilterMult);
+		analogueEnc = new PALSystem(bSys, true, resonance, prefilterMult, phaseNoise, scanlineJitter, noiseExponent);
 		break;
 	case ColourSystems::NTSC:
-		analogueEnc = new NTSCSystem(bSys, true, resonance, prefilterMult);
+		analogueEnc = new NTSCSystem(bSys, true, resonance, prefilterMult, phaseNoise, scanlineJitter, noiseExponent);
 		break;
 	case ColourSystems::SECAM:
-		analogueEnc = new SECAMSystem(bSys, true, resonance, prefilterMult);
+		analogueEnc = new SECAMSystem(bSys, true, resonance, prefilterMult, phaseNoise, scanlineJitter, noiseExponent);
 		break;
 	}
 	actualFramerate = analogueEnc->bcParams->framerate;
@@ -100,7 +100,7 @@ void ConversionEngine::CloseDecoder()
 	avformat_close_input(&infmtcontext);
 }
 
-void ConversionEngine::EncodeVideo(const char* outFileName, bool preview, double kbps, double noise, double globalPhaseNoise, double crosstalk, double phaseNoise, double jitter)
+void ConversionEngine::EncodeVideo(const char* outFileName, bool preview, double kbps, double noise, double crosstalk)
 {
 	//Zero out the buffer just in case
 	for (int i = 0; i < (int)((8.0 / 3.0) * outHeight * outHeight); i++)
@@ -193,7 +193,6 @@ void ConversionEngine::EncodeVideo(const char* outFileName, bool preview, double
 	else totalNumFrames = (int)((((double)(invidstream->duration)) * ((double)invidstream->time_base.num)) / ((double)invidstream->time_base.den * actualFrametime));
 	std::mt19937_64 rng;
 	std::uniform_real_distribution<> ndist(-noise, noise);
-	std::uniform_real_distribution<> phdist(-globalPhaseNoise, globalPhaseNoise);
 	for (int i = 0; i < totalNumFrames; i++)
 	{
 		av_frame_make_writable(outcurFrame);
@@ -202,7 +201,7 @@ void ConversionEngine::EncodeVideo(const char* outFileName, bool preview, double
 		{
 			sig.signal[j] += ndist(rng);
 		}
-		finData = analogueEnc->Decode(sig, interlaceField, crosstalk, phdist(rng), phaseNoise, jitter);
+		finData = analogueEnc->Decode(sig, interlaceField, crosstalk);
 		for (int j = 0; j < analogueEnc->bcParams->videoScanlines / 2; j++) //We only got half a frame out, so we assume interlacing and copy appropriately
 		{
 			memcpy(analogueFrameBuffer + (finData.width * (j * 2 + interlaceField)), finData.image + (finData.width * j), finData.width * 4);

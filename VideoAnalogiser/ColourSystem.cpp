@@ -12,7 +12,7 @@ ColourSystem::ColourSystem()
 	bcParams = &SystemI;
 }
 
-ColourSystem::ColourSystem(BroadcastSystems sys, bool interlace, double resonance, double prefilterMult)
+ColourSystem::ColourSystem(BroadcastSystems sys, bool interlace, double resonance, double prefilterMult, double phaseNoise, double scanlineJitter, double noiseExponent)
 {
 	switch (sys)
 	{

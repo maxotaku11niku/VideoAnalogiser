@@ -8,6 +8,7 @@
 #pragma once
 #include <random>
 #include "ColourSystem.h"
+#include "MultiOctaveNoiseGen.h"
 
 const double RGBtoYUVConversionMatrix[9] = { 0.299,    0.587,    0.114,
                                             -0.14713, -0.28886,  0.436,
@@ -20,12 +21,13 @@ const double YUVtoRGBConversionMatrix[9] = { 1.0,  0.0,      1.13983,
 class PALSystem : public ColourSystem
 {
 public:
-	PALSystem(BroadcastSystems sys, bool interlace, double resonance, double prefilterMult);
+	PALSystem(BroadcastSystems sys, bool interlace, double resonance, double prefilterMult, double phaseNoise, double scanlineJitter, double noiseExponent);
 
     virtual SignalPack Encode(FrameData imgdat, int interlaceField) override;
-    virtual FrameData Decode(SignalPack signal, int interlaceField, double crosstalk, double phaseError, double phaseNoise, double scanlineJitter) override;
+    virtual FrameData Decode(SignalPack signal, int interlaceField, double crosstalk) override;
 private:
-    std::mt19937_64 rng;
+    MultiOctaveNoiseGen* jitGen;
+    MultiOctaveNoiseGen* phNoiseGen;
     bool interlaced;
     int fieldScanlines;
     int activeWidth;

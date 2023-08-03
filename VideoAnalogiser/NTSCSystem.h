@@ -10,6 +10,7 @@
 #include <random>
 #include <math.h>
 #include "ColourSystem.h"
+#include "MultiOctaveNoiseGen.h"
 
 const double RGBtoYIQConversionMatrix[9] = { 0.299,    0.587,  0.114,
                                              0.5959, -0.2746, -0.3213,
@@ -24,12 +25,13 @@ constexpr double chromaPhase = 33.0 * (M_PI / 180.0);
 class NTSCSystem : public ColourSystem
 {
 public:
-    NTSCSystem(BroadcastSystems sys, bool interlace, double resonance, double prefilterMult);
+    NTSCSystem(BroadcastSystems sys, bool interlace, double resonance, double prefilterMult, double phaseNoise, double scanlineJitter, double noiseExponent);
 
     virtual SignalPack Encode(FrameData imgdat, int interlaceField) override;
-    virtual FrameData Decode(SignalPack signal, int interlaceField, double crosstalk, double phaseError, double phaseNoise, double scanlineJitter) override;
+    virtual FrameData Decode(SignalPack signal, int interlaceField, double crosstalk) override;
 private:
-    std::mt19937_64 rng;
+    MultiOctaveNoiseGen* jitGen;
+    MultiOctaveNoiseGen* phNoiseGen;
     bool interlaced;
     int fieldScanlines;
     int activeWidth;

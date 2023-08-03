@@ -8,7 +8,7 @@
 #include <iostream>
 #include "SECAMSystem.h"
 
-SECAMSystem::SECAMSystem(BroadcastSystems sys, bool interlace, double resonance, double prefilterMult)
+SECAMSystem::SECAMSystem(BroadcastSystems sys, bool interlace, double resonance, double prefilterMult, double phaseNoise, double scanlineJitter, double noiseExponent)
 {
 	switch (sys)
 	{
@@ -77,6 +77,9 @@ SECAMSystem::SECAMSystem(BroadcastSystems sys, bool interlace, double resonance,
     DbSignalQ = new double[signalLen];
     DrSignalI = new double[signalLen];
     DrSignalQ = new double[signalLen];
+
+    jitGen = new MultiOctaveNoiseGen(11, 0.0, scanlineJitter * activeWidth, noiseExponent);
+    phNoiseGen = new MultiOctaveNoiseGen(11, 0.0, phaseNoise, noiseExponent);
 }
 
 SignalPack SECAMSystem::Encode(FrameData imgdat, int interlaceField)
@@ -201,7 +204,7 @@ SignalPack SECAMSystem::Encode(FrameData imgdat, int interlaceField)
     return { signalOut, signalLen };
 }
 
-FrameData SECAMSystem::Decode(SignalPack signal, int interlaceField, double crosstalk, double phaseError, double phaseNoise, double scanlineJitter)
+FrameData SECAMSystem::Decode(SignalPack signal, int interlaceField, double crosstalk)
 {
     double realActiveTime = bcParams->activeTime;
     double realScanlineTime = 1.0 / (double)(fieldScanlines * bcParams->framerate);
@@ -318,7 +321,6 @@ FrameData SECAMSystem::Decode(SignalPack signal, int interlaceField, double cros
 
     int* surfaceColours = writeToSurface.image;
     int currentScanline;
-    std::uniform_real_distribution<> jitdist(-scanlineJitter * activeWidth, scanlineJitter * activeWidth);
     int curjit = 0;
     int finCol = 0;
     double dR = 0.0;
@@ -328,7 +330,9 @@ FrameData SECAMSystem::Decode(SignalPack signal, int interlaceField, double cros
     for (int i = 0; i < fieldScanlines; i++)
     {
         componentAlternate = i % 2;
-        curjit = (int)jitdist(rng);
+        curjit = (int)jitGen->GenNoise();
+        if (curjit > 100) curjit = 100;
+        if (curjit < -100) curjit = -100; //Limit jitter distance to prevent buffer overflow
         pos = activeSignalStarts[i] + curjit;
         DbPos = activeSignalStarts[componentAlternate == 0 ? i : (i - 1)] + curjit;
         if (i <= 0)

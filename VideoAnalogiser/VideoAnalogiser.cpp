@@ -27,13 +27,13 @@ void ShowHelp()
 	std::cout << "-prefreq [amount]: Prefilter width multiplier, recommended values 0.1 - 1.0. Defaults to 0.7." << std::endl;
 	std::cout << "-psnoise [amount]: Colour decoder phase noise (per scanline), recommended values 0.0 - 3.0. Defaults to 0.0." << std::endl;
 	std::cout << "-crosstalk [amount]: Decoder luma-chroma crosstalk, recommended values 0.0 - 1.0. Defaults to 0.0." << std::endl;
-	std::cout << "-pfnoise [amount]: Colour decoder phase noise (per field), recommended values 0.0 - 3.0. Defaults to 0.0." << std::endl;
+	std::cout << "-noiseexp [amount]: Jitter and scanline phase noise spectrum exponent (goes as f^-amount), recommended values 0.0 - 1.0. Defaults to 0.5." << std::endl;
 }
 
 int main(int argc, char** argv)
 {
 	std::cout << "VideoAnalogiser - Command Line Utility for Analogising Digital Videos" << std::endl;
-	std::cout << "Version 0.8" << std::endl;
+	std::cout << "Version 0.9" << std::endl;
 	std::cout << "Ideal for faking the past :)" << std::endl;
 	std::cout << "Copyright (C) 2023 Maxim Hoxha" << std::endl << std::endl;
 	std::cout << "This program is free software: you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation, either version 3 of the License, or (at your option) any later version." << std::endl;
@@ -84,7 +84,7 @@ int main(int argc, char** argv)
 	bool preview = false;
 	double kbitrate = 10000.0;
 	double noise = 0.0;
-	double globalPhaseNoise = 0.0;
+	double noiseExp = 0.5;
 	double crosstalk = 0.0;
 	double phaseNoise = 0.0;
 	double jitter = 0.0;
@@ -160,10 +160,10 @@ int main(int argc, char** argv)
 			i++;
 			crosstalk = strtod(argv[i], NULL);
 		}
-		else if (!strcmp(argv[i], "-pfnoise"))
+		else if (!strcmp(argv[i], "-noiseexp"))
 		{
 			i++;
-			globalPhaseNoise = strtod(argv[i], NULL);
+			noiseExp = strtod(argv[i], NULL);
 		}
 		else if (!strcmp(argv[i], "-h"))
 		{
@@ -227,11 +227,11 @@ int main(int argc, char** argv)
 
 	std::cout << "Encoding to: " << bSysStr << " " << cSysStr << std::endl;
 	std::cout << "Initialising engine..." << std::endl;
-	ConversionEngine convEng = ConversionEngine(bSys, cSys, dResonance, pWidthMult);
+	ConversionEngine convEng = ConversionEngine(bSys, cSys, dResonance, pWidthMult, phaseNoise, jitter, noiseExp);
 	omp_set_dynamic(true);
 	convEng.OpenForDecodeVideo(argv[1]);
 	std::cout << "Begin encoding." << std::endl;
-	convEng.EncodeVideo(argv[2], preview, kbitrate, noise, globalPhaseNoise, crosstalk, phaseNoise, jitter);
+	convEng.EncodeVideo(argv[2], preview, kbitrate, noise, crosstalk);
 	convEng.CloseDecoder();
 	std::cout << "Finished conversion!" << std::endl;
 

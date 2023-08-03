@@ -32,12 +32,12 @@ class ColourSystem
 {
 public:
 	ColourSystem();
-	ColourSystem(BroadcastSystems sys, bool interlace, double resonance, double prefilterMult);
+	ColourSystem(BroadcastSystems sys, bool interlace, double resonance, double prefilterMult, double phaseNoise, double scanlineJitter, double noiseExponent);
 
 	const BroadcastStandard* bcParams;
 
 	virtual SignalPack Encode(FrameData imgdat, int interlaceField) = 0;
-	virtual FrameData Decode(SignalPack signal, int interlaceField, double crosstalk, double phaseError, double phaseNoise, double scanlineJitter) = 0;
+	virtual FrameData Decode(SignalPack signal, int interlaceField, double crosstalk) = 0;
 
 protected:
 	const double* RGBtoYCCConversionMatrix;

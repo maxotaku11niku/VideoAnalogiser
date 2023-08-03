@@ -8,7 +8,7 @@
 #include <iostream>
 #include "NTSCSystem.h"
 
-NTSCSystem::NTSCSystem(BroadcastSystems sys, bool interlace, double resonance, double prefilterMult)
+NTSCSystem::NTSCSystem(BroadcastSystems sys, bool interlace, double resonance, double prefilterMult, double phaseNoise, double scanlineJitter, double noiseExponent)
 {
     switch (sys)
     {
@@ -72,6 +72,9 @@ NTSCSystem::NTSCSystem(BroadcastSystems sys, bool interlace, double resonance, d
     lumaprefir = MakeFIRFilter(sampleRate, 256, 0.0, 2.0 * bcParams->mainBandwidth * prefilterMult, PREFILTER_RESONANCE);
     iprefir = MakeFIRFilter(sampleRate, 256, 0.0, 2.0 * bcParams->chromaBandwidthLower * prefilterMult, PREFILTER_RESONANCE);
     qprefir = MakeFIRFilter(sampleRate, 256, 0.0, 2.0 * bcParams->chromaBandwidthUpper * prefilterMult, PREFILTER_RESONANCE);
+
+    jitGen = new MultiOctaveNoiseGen(11, 0.0, scanlineJitter * activeWidth, noiseExponent);
+    phNoiseGen = new MultiOctaveNoiseGen(11, 0.0, phaseNoise, noiseExponent);
 }
 
 SignalPack NTSCSystem::Encode(FrameData imgdat, int interlaceField)
@@ -173,7 +176,7 @@ SignalPack NTSCSystem::Encode(FrameData imgdat, int interlaceField)
     return { signalOut, signalLen };
 }
 
-FrameData NTSCSystem::Decode(SignalPack signal, int interlaceField, double crosstalk, double phaseError, double phaseNoise, double scanlineJitter)
+FrameData NTSCSystem::Decode(SignalPack signal, int interlaceField, double crosstalk)
 {
     double realActiveTime = bcParams->activeTime;
     double realScanlineTime = 1.0 / (double)(fieldScanlines * bcParams->framerate);
@@ -199,13 +202,11 @@ FrameData NTSCSystem::Decode(SignalPack signal, int interlaceField, double cross
     SignalPack newSignal = ApplyFIRFilter(signal, mainfir);
 
     //Extract QAM colour signals
-    std::uniform_real_distribution<> phdist(-phaseNoise, phaseNoise);
     double time = 0.0;
     double phOffs = 0.0;
     for (int i = 0; i < fieldScanlines; i++)
     {
-        phOffs = phdist(rng);
-        phOffs += phaseError + chromaPhase;
+        phOffs = phNoiseGen->GenNoise() + chromaPhase;
         while (pos < boundaryPoints[i + 1])
         {
             time = pos * sampleTime;
@@ -227,7 +228,6 @@ FrameData NTSCSystem::Decode(SignalPack signal, int interlaceField, double cross
     }
 
     int* surfaceColours = writeToSurface.image;
-    std::uniform_real_distribution<> jitdist(-scanlineJitter * activeWidth, scanlineJitter * activeWidth);
     int curjit = 0;
     int finCol = 0;
     double dR = 0.0;
@@ -236,9 +236,10 @@ FrameData NTSCSystem::Decode(SignalPack signal, int interlaceField, double cross
     //Write decoded signals to our frame (NTSC is very simple so we don't have to do any more than filtering and demodulation)
     for (int i = 0; i < fieldScanlines; i++)
     {
-        curjit = (int)jitdist(rng);
+        curjit = (int)jitGen->GenNoise();
+        if (curjit > 100) curjit = 100;
+        if (curjit < -100) curjit = -100; //Limit jitter distance to prevent buffer overflow
         pos = activeSignalStarts[i] + curjit;
-
         for (int j = 0; j < writeToSurface.width; j++) //Decode active signal region only
         {
             Y = finalSignal.signal[pos];

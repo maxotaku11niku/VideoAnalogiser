@@ -3,7 +3,7 @@
 #
 
 # Add source to this project's executable.
-add_executable (VideoAnalogiser "VideoAnalogiser.cpp" "VideoAnalogiser.h" "BroadcastStandard.cpp" "BroadcastStandard.h" "ColourSystem.cpp" "ColourSystem.h" "PALSystem.cpp" "PALSystem.h" "Utils.cpp" "Utils.h" "ConversionEngine.cpp" "ConversionEngine.h" "NTSCSystem.cpp" "NTSCSystem.h" "SECAMSystem.cpp" "SECAMSystem.h")
+add_executable (VideoAnalogiser "VideoAnalogiser.cpp" "VideoAnalogiser.h" "BroadcastStandard.cpp" "BroadcastStandard.h" "ColourSystem.cpp" "ColourSystem.h" "PALSystem.cpp" "PALSystem.h" "Utils.cpp" "Utils.h" "ConversionEngine.cpp" "ConversionEngine.h" "NTSCSystem.cpp" "NTSCSystem.h" "SECAMSystem.cpp" "SECAMSystem.h" "MultiOctaveNoiseGen.cpp" "MultiOctaveNoiseGen.h")
 
 if (CMAKE_VERSION VERSION_GREATER 3.12)
   set_property(TARGET VideoAnalogiser PROPERTY CXX_STANDARD 20)

@@ -22,10 +22,10 @@ extern "C"
 class ConversionEngine
 {
 public:
-	ConversionEngine(BroadcastSystems bSys, ColourSystems cSys, double resonance, double prefilterMult);
+	ConversionEngine(BroadcastSystems bSys, ColourSystems cSys, double resonance, double prefilterMult, double phaseNoise, double scanlineJitter, double noiseExponent);
 
 	void OpenForDecodeVideo(const char* inFileName);
-    void EncodeVideo(const char* outFileName, bool preview, double kbps, double noise, double globalPhaseNoise, double crosstalk, double phaseNoise, double jitter);
+    void EncodeVideo(const char* outFileName, bool preview, double kbps, double noise, double crosstalk);
 	void CloseDecoder();
 private:
     ColourSystem* analogueEnc = NULL;

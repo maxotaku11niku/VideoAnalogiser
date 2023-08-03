@@ -8,7 +8,7 @@
 #include <iostream>
 #include "PALSystem.h"
 
-PALSystem::PALSystem(BroadcastSystems sys, bool interlace, double resonance, double prefilterMult)
+PALSystem::PALSystem(BroadcastSystems sys, bool interlace, double resonance, double prefilterMult, double phaseNoise, double scanlineJitter, double noiseExponent)
 {
 	switch (sys)
 	{
@@ -75,6 +75,9 @@ PALSystem::PALSystem(BroadcastSystems sys, bool interlace, double resonance, dou
 	VSignal = new double[signalLen];
 	USignalPreAlt = new double[signalLen];
 	VSignalPreAlt = new double[signalLen];
+
+	jitGen = new MultiOctaveNoiseGen(11, 0.0, scanlineJitter * activeWidth, noiseExponent);
+	phNoiseGen = new MultiOctaveNoiseGen(11, 0.0, phaseNoise, noiseExponent);
 }
 
 SignalPack PALSystem::Encode(FrameData imgdat, int interlaceField)
@@ -184,7 +187,7 @@ SignalPack PALSystem::Encode(FrameData imgdat, int interlaceField)
     return { signalOut, signalLen };
 }
 
-FrameData PALSystem::Decode(SignalPack signal, int interlaceField, double crosstalk, double phaseError, double phaseNoise, double scanlineJitter)
+FrameData PALSystem::Decode(SignalPack signal, int interlaceField, double crosstalk)
 {
     double realActiveTime = bcParams->activeTime;
     double realScanlineTime = 1.0 / (double)(fieldScanlines * bcParams->framerate);
@@ -208,12 +211,10 @@ FrameData PALSystem::Decode(SignalPack signal, int interlaceField, double crosst
 	//Extract QAM colour signals
     double time = 0.0;
     double carrierAngFreq = bcParams->carrierAngFreq;
-	std::uniform_real_distribution<> phdist(-phaseNoise, phaseNoise);
 	double phOffs = 0.0;
 	for (int i = 0; i < fieldScanlines; i++)
 	{
-		phOffs = phdist(rng);
-		phOffs += phaseError;
+		phOffs = phNoiseGen->GenNoise();
 		while (pos < boundaryPoints[i + 1])
 		{
 			time = pos * sampleTime;
@@ -259,7 +260,6 @@ FrameData PALSystem::Decode(SignalPack signal, int interlaceField, double crosst
     }
 
     int* surfaceColours = writeToSurface.image;
-	std::uniform_real_distribution<> jitdist(-scanlineJitter * activeWidth, scanlineJitter * activeWidth);
     int curjit = 0;
 	int finCol = 0;
 	double dR = 0.0;
@@ -268,9 +268,10 @@ FrameData PALSystem::Decode(SignalPack signal, int interlaceField, double crosst
 	//Write decoded signals to our frame
     for (int i = 0; i < fieldScanlines; i++)
     {
-        curjit = (int)jitdist(rng);
+		curjit = (int)jitGen->GenNoise();
+		if (curjit > 100) curjit = 100;
+		if (curjit < -100) curjit = -100; //Limit jitter distance to prevent buffer overflow
         pos = activeSignalStarts[i] + curjit;
-
         for (int j = 0; j < writeToSurface.width; j++) //Decode active signal region only
         {
             Y = finalSignal.signal[pos];
