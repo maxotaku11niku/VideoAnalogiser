@@ -16,7 +16,7 @@ extern "C"
 #include "ffmpeg/libavutil/opt.h"
 }
 
-const char fillChars[5] = { ' ', '\xB0', '\xB1', '\xB2', '\xDB' };
+const char fillChars[5] = { ' ', '-', '=', '#', '@' };
 
 ConversionEngine::ConversionEngine(BroadcastSystems bSys, ColourSystems cSys, double resonance, double prefilterMult, double phaseNoise, double scanlineJitter, double noiseExponent)
 {
@@ -113,7 +113,7 @@ char* ConversionEngine::GenerateTextProgressBar(double progress, int fullLength)
 	double partFill = logicalLength - filledLength;
 	for (int i = 0; i < filledLength; i++)
 	{
-		progBarChars[i] = '\xDB';
+		progBarChars[i] = '@';
 	}
 	if (progress >= 1.0) return progBarChars;
 	progBarChars[filledLength] = fillChars[(int)round((partFill * 4.0) + 0.5)];
@@ -285,11 +285,11 @@ void ConversionEngine::EncodeVideo(const char* outFileName, bool preview, double
 		interlaceField = interlaceField ? 0 : 1;
 		delete[] sig.signal;
 		delete[] finData.image;
-		sprintf(progString, "Wrote frame %u/%u\n", i + 1, totalNumFrames);
+		sprintf(progString, "Wrote frame %u/%u ", i + 1, totalNumFrames);
 		strcat(progString, "[");
 		strcat(progString, GenerateTextProgressBar(((double)(i + 1)) / ((double)totalNumFrames), 78));
 		strcat(progString, "]");
-		std::cout << progString << "\x1B[1F";
+		std::cout << progString << "\r";
 	}
 	std::cout << std::endl;
 
