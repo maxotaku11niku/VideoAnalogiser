@@ -39,8 +39,8 @@ private:
     FIRFilter colfir;
     FIRFilter lumaprefir;
     FIRFilter chromaprefir;
-    double* USignal;
-    double* VSignal;
-    double* USignalPreAlt;
-    double* VSignalPreAlt;
+    float* USignal;
+    float* VSignal;
+    float* USignalPreAlt;
+    float* VSignalPreAlt;
 };

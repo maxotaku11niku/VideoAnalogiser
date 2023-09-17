@@ -43,8 +43,8 @@ private:
     FIRFilter colfir;
     FIRFilter lumaprefir;
     FIRFilter chromaprefir;
-    double* DbSignalI;
-    double* DbSignalQ;
-    double* DrSignalI;
-    double* DrSignalQ;
+    float* DbSignalI;
+    float* DbSignalQ;
+    float* DrSignalI;
+    float* DrSignalQ;
 };

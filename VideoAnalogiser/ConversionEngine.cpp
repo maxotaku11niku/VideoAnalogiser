@@ -6,6 +6,7 @@
 */
 
 #include <string>
+#include <iostream>
 #include <random>
 #include "ConversionEngine.h"
 
@@ -14,6 +15,8 @@ extern "C"
 #include "ffmpeg/libavutil/imgutils.h"
 #include "ffmpeg/libavutil/opt.h"
 }
+
+const char fillChars[5] = { ' ', '\xB0', '\xB1', '\xB2', '\xDB' };
 
 ConversionEngine::ConversionEngine(BroadcastSystems bSys, ColourSystems cSys, double resonance, double prefilterMult, double phaseNoise, double scanlineJitter, double noiseExponent)
 {
@@ -36,7 +39,7 @@ ConversionEngine::ConversionEngine(BroadcastSystems bSys, ColourSystems cSys, do
 	alreadyOpen = false;
 	outHeight = analogueEnc->bcParams->videoScanlines;
 	int vsc = analogueEnc->bcParams->videoScanlines;
-	analogueFrameBuffer = new int[(int)(vsc * vsc * (8.0/3.0))];
+	analogueFrameBuffer = new int[vsc * FIXEDWIDTH];
 }
 
 //Sets up our converter upon loading a video file
@@ -81,16 +84,16 @@ void ConversionEngine::OpenForDecodeVideo(const char* inFileName)
 	//Setup rescalers
 	inAspect = ((double)inWidth) / ((double)inHeight);
 	outWidth = (int)((double)outHeight * inAspect * 0.5) * 2;
-	scalercontextForAnalogue = sws_getContext(inWidth, inHeight, inPixFormat, (8.0 / 3.0) * outHeight, outHeight, AVPixelFormat::AV_PIX_FMT_BGRA, SWS_BILINEAR, NULL, NULL, NULL);
-	scalercontextForFinal = sws_getContext((8.0 / 3.0) * outHeight, outHeight, AVPixelFormat::AV_PIX_FMT_BGRA, outWidth, outHeight, AVPixelFormat::AV_PIX_FMT_YUV422P, SWS_BILINEAR, NULL, NULL, NULL);
-	vidscaleBufsizeForAnalogue = av_image_alloc(vidscaleDataForAnalogue, vidscaleLineSizeForAnalogue, (8.0 / 3.0) * outHeight, outHeight, AVPixelFormat::AV_PIX_FMT_BGRA, 1);
-	vidscaleBufsizeForInterlace = av_image_alloc(vidscaleDataForInterlace, vidscaleLineSizeForInterlace, (8.0 / 3.0) * outHeight, outHeight, AVPixelFormat::AV_PIX_FMT_BGRA, 1);
+	scalercontextForAnalogue = sws_getContext(inWidth, inHeight, inPixFormat, FIXEDWIDTH, outHeight, AVPixelFormat::AV_PIX_FMT_BGRA, SWS_BILINEAR, NULL, NULL, NULL);
+	scalercontextForFinal = sws_getContext(FIXEDWIDTH, outHeight, AVPixelFormat::AV_PIX_FMT_BGRA, outWidth, outHeight, AVPixelFormat::AV_PIX_FMT_YUV422P, SWS_BILINEAR, NULL, NULL, NULL);
+	vidscaleBufsizeForAnalogue = av_image_alloc(vidscaleDataForAnalogue, vidscaleLineSizeForAnalogue, FIXEDWIDTH, outHeight, AVPixelFormat::AV_PIX_FMT_BGRA, 1);
+	vidscaleBufsizeForInterlace = av_image_alloc(vidscaleDataForInterlace, vidscaleLineSizeForInterlace, FIXEDWIDTH, outHeight, AVPixelFormat::AV_PIX_FMT_BGRA, 1);
 	vidscaleBufsizeForFinal = av_image_alloc(vidscaleDataForFinal, vidscaleLineSizeForFinal, outWidth, outHeight, AVPixelFormat::AV_PIX_FMT_YUV422P, 1);
 	alreadyOpen = true;
 	totalTime = (((double)(invidstream->duration)) * ((double)invidstream->time_base.num)) / ((double)invidstream->time_base.den);
 }
 
-//This function is not filled yet, which doesn't matter too much for a simple console application (since all resources are free upon program termination), but WOULD matter in a GUI application.
+//This function is not filled yet, which doesn't matter too much for a simple console application (since all resources are freed upon program termination), but WOULD matter in a GUI application.
 void ConversionEngine::CloseDecoder()
 {
 	sws_freeContext(scalercontextForAnalogue);
@@ -100,10 +103,31 @@ void ConversionEngine::CloseDecoder()
 	avformat_close_input(&infmtcontext);
 }
 
+char* ConversionEngine::GenerateTextProgressBar(double progress, int fullLength)
+{
+	if (progress < 0) progress = 0;
+	char progBarChars[256];
+	memset(progBarChars, 0, 256);
+	double logicalLength = fullLength * progress;
+	int filledLength = (int)logicalLength;
+	double partFill = logicalLength - filledLength;
+	for (int i = 0; i < filledLength; i++)
+	{
+		progBarChars[i] = '\xDB';
+	}
+	if (progress >= 1.0) return progBarChars;
+	progBarChars[filledLength] = fillChars[(int)round((partFill * 4.0) + 0.5)];
+	for (int i = filledLength + 1; i < fullLength; i++)
+	{
+		progBarChars[i] = ' ';
+	}
+	return progBarChars;
+}
+
 void ConversionEngine::EncodeVideo(const char* outFileName, bool preview, double kbps, double noise, double crosstalk)
 {
 	//Zero out the buffer just in case
-	for (int i = 0; i < (int)((8.0 / 3.0) * outHeight * outHeight); i++)
+	for (int i = 0; i < FIXEDWIDTH * outHeight; i++)
 	{
 		analogueFrameBuffer[i] = 0xFF000000;
 	}
@@ -193,10 +217,11 @@ void ConversionEngine::EncodeVideo(const char* outFileName, bool preview, double
 	else totalNumFrames = (int)((((double)(invidstream->duration)) * ((double)invidstream->time_base.num)) / ((double)invidstream->time_base.den * actualFrametime));
 	std::mt19937_64 rng;
 	std::uniform_real_distribution<> ndist(-noise, noise);
+	char progString[256];
 	for (int i = 0; i < totalNumFrames; i++)
 	{
 		av_frame_make_writable(outcurFrame);
-		sig = analogueEnc->Encode({ (int*)vidscaleDataForAnalogue[0], (int)((8.0 / 3.0) * outHeight), outHeight }, interlaceField);
+		sig = analogueEnc->Encode({ (int*)vidscaleDataForAnalogue[0], FIXEDWIDTH, outHeight }, interlaceField);
 		for (int j = 0; j < sig.len; j++) //Will be replaced with a generic signal transform function soon
 		{
 			sig.signal[j] += ndist(rng);
@@ -260,8 +285,13 @@ void ConversionEngine::EncodeVideo(const char* outFileName, bool preview, double
 		interlaceField = interlaceField ? 0 : 1;
 		delete[] sig.signal;
 		delete[] finData.image;
-		printf("Wrote frame %u/%u\n", i + 1, totalNumFrames);
+		sprintf(progString, "Wrote frame %u/%u\n", i + 1, totalNumFrames);
+		strcat(progString, "[");
+		strcat(progString, GenerateTextProgressBar(((double)(i + 1)) / ((double)totalNumFrames), 78));
+		strcat(progString, "]");
+		std::cout << progString << "\x1B[1F";
 	}
+	std::cout << std::endl;
 
 	//Write epilogue and finish
 	av_write_trailer(outfmtcontext);

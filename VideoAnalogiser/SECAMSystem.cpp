@@ -52,7 +52,7 @@ SECAMSystem::SECAMSystem(BroadcastSystems sys, bool interlace, double resonance,
 	YCCtoRGBConversionMatrix = YDbDrtoRGBConversionMatrix;
 
 	interlaced = interlace;
-	activeWidth = (int)((8.0 / 3.0) * bcParams->videoScanlines);
+	activeWidth = FIXEDWIDTH;
 	fieldScanlines = interlace ? bcParams->videoScanlines / 2 : bcParams->videoScanlines;
 	boundaryPoints = new int[fieldScanlines + 1]; //Boundaries of the scanline signals
 	activeSignalStarts = new int[fieldScanlines]; //Start points of the active parts
@@ -73,10 +73,10 @@ SECAMSystem::SECAMSystem(BroadcastSystems sys, bool interlace, double resonance,
     lumaprefir = MakeFIRFilter(sampleRate, 256, 0.0, 2.0 * bcParams->mainBandwidth * prefilterMult, PREFILTER_RESONANCE);
     chromaprefir = MakeFIRFilter(sampleRate, 256, 0.0, 2.0 * bcParams->chromaBandwidthLower * prefilterMult, PREFILTER_RESONANCE);
 
-    DbSignalI = new double[signalLen];
-    DbSignalQ = new double[signalLen];
-    DrSignalI = new double[signalLen];
-    DrSignalQ = new double[signalLen];
+    DbSignalI = new float[signalLen];
+    DbSignalQ = new float[signalLen];
+    DrSignalI = new float[signalLen];
+    DrSignalQ = new float[signalLen];
 
     jitGen = new MultiOctaveNoiseGen(11, 0.0, scanlineJitter * activeWidth, noiseExponent);
     phNoiseGen = new MultiOctaveNoiseGen(11, 0.0, phaseNoise, noiseExponent);
@@ -87,7 +87,7 @@ SignalPack SECAMSystem::Encode(FrameData imgdat, int interlaceField)
     double realActiveTime = bcParams->activeTime;
     double realScanlineTime = 1.0 / (double)(fieldScanlines * bcParams->framerate);
     int signalLen = (int)(imgdat.width * fieldScanlines * (realScanlineTime / realActiveTime)); //To get a good analogue feel, we must limit the vertical resolution; the horizontal resolution will be limited as we decode the distorted signal.
-    double* signalOut = new double[signalLen];
+    float* signalOut = new float[signalLen];
     double R = 0.0;
     double G = 0.0;
     double B = 0.0;
@@ -118,18 +118,18 @@ SignalPack SECAMSystem::Encode(FrameData imgdat, int interlaceField)
     int w = imgdat.width;
     int col;
     int subcarrierstartind = (int)((SUBCARRIER_START_TIME / realActiveTime) * ((double)imgdat.width));
-    SignalPack Ysig = { new double[signalLen], signalLen };
-    SignalPack Dbsig = { new double[signalLen], signalLen };
-    SignalPack Drsig = { new double[signalLen], signalLen };
+    SignalPack Ysig = { new float[signalLen], signalLen };
+    SignalPack Dbsig = { new float[signalLen], signalLen };
+    SignalPack Drsig = { new float[signalLen], signalLen };
     //Make component signals
     for (int i = 0; i < fieldScanlines; i++) //Only generate active scanlines
     {
         currentScanline = interlaced ? (i * 2 + polarity) % bcParams->videoScanlines : i;
         for (int j = 0; j < activeSignalStarts[i]; j++) //Front porch, ignore sync signal because we don't see its results
         {
-            Ysig.signal[pos] = 0.0;
-            Dbsig.signal[pos] = 0.0;
-            Drsig.signal[pos] = 0.0;
+            Ysig.signal[pos] = 0.0f;
+            Dbsig.signal[pos] = 0.0f;
+            Drsig.signal[pos] = 0.0f;
             pos++;
         }
         for (int j = 0; j < imgdat.width; j++) //Active signal
@@ -151,9 +151,9 @@ SignalPack SECAMSystem::Encode(FrameData imgdat, int interlaceField)
         }
         while (pos < boundaryPoints[i + 1]) //Back porch, ignore sync signal because we don't see its results
         {
-            Ysig.signal[pos] = 0.0;
-            Dbsig.signal[pos] = 0.0;
-            Drsig.signal[pos] = 0.0;
+            Ysig.signal[pos] = 0.0f;
+            Dbsig.signal[pos] = 0.0f;
+            Drsig.signal[pos] = 0.0f;
             pos++;
         }
     }
@@ -165,7 +165,7 @@ SignalPack SECAMSystem::Encode(FrameData imgdat, int interlaceField)
     pos = 0;
     double scAngFreq = 0.0;
     double scAngFreqShift = 0.0;
-    double* curChromaSig;
+    float* curChromaSig;
     //Composite component signals
     for (int i = 0; i < fieldScanlines; i++)
     {
@@ -188,7 +188,7 @@ SignalPack SECAMSystem::Encode(FrameData imgdat, int interlaceField)
         instantPhase = 0.0;
         while (pos < boundaryPoints[i + 1])
         {
-            instantPhase += sampleTime * (scAngFreq + scAngFreqShift * curChromaSig[pos]);
+            instantPhase += sampleTime * (scAngFreq + scAngFreqShift * (double)curChromaSig[pos]);
             signalOut[pos] = filtYsig.signal[pos] + 0.115 * cos(instantPhase); //Add chroma via FM
             pos++;
         }
@@ -225,8 +225,8 @@ FrameData SECAMSystem::Decode(SignalPack signal, int interlaceField, double cros
     double freqPoint = 0.0;
     double sampleTime = realActiveTime / (double)activeWidth;
     
-    SignalPack DbSignal = ApplyFIRFilterCrosstalkShift(signal, colfir, crosstalk, sampleTime, bcParams->carrierAngFreq);
-    SignalPack DrSignal = ApplyFIRFilterCrosstalkShift(signal, colfir, crosstalk, sampleTime, bcParams->carrierAngFreq);
+    SignalPack DbSignal = ApplyFIRFilterCrosstalkShift(signal, colfir, crosstalk, sampleTime, bcParams->carrierAngFreqDb);
+    SignalPack DrSignal = ApplyFIRFilterCrosstalkShift(signal, colfir, crosstalk, sampleTime, bcParams->carrierAngFreqDr);
     SignalPack newSignal = ApplyFIRFilter(signal, mainfir);
     
     /*/
@@ -290,8 +290,8 @@ FrameData SECAMSystem::Decode(SignalPack signal, int interlaceField, double cros
     double DrLastFreqShift = 0.0;
     for (int i = 0; i < signal.len; i++) //Somehow this bunch of magic acts as a functional FM decoder
     {
-        DbDeriv = DbSignal.signal[i] - DbLast;
-        DrDeriv = DrSignal.signal[i] - DrLast;
+        DbDeriv = (double)DbSignal.signal[i] - DbLast;
+        DrDeriv = (double)DrSignal.signal[i] - DrLast;
         DbLast = DbSignal.signal[i];
         DrLast = DrSignal.signal[i];
         curDb = (DbDecodeAngFreq - scAngFreqDb) / scAngFreqShiftDb;
@@ -300,8 +300,8 @@ FrameData SECAMSystem::Decode(SignalPack signal, int interlaceField, double cros
         DrSignal.signal[i] = curDr;
         DbFreqShift = -(cos(DbDecodePhase) * DbDeriv) - (DbDecodeAngFreq * sin(DbDecodePhase) * DbLast);
         DrFreqShift = -(cos(DrDecodePhase) * DrDeriv) - (DrDecodeAngFreq * sin(DrDecodePhase) * DrLast);
-        DbDecodeAngFreq += 2.0 * (DbFreqShift - DbLastFreqShift);
-        DrDecodeAngFreq += 2.0 * (DrFreqShift - DrLastFreqShift);
+        DbDecodeAngFreq += 1.1 * (DbFreqShift - DbLastFreqShift);
+        DrDecodeAngFreq += 1.1 * (DrFreqShift - DrLastFreqShift);
         DbDecodePhase += sampleTime * DbDecodeAngFreq;
         DrDecodePhase += sampleTime * DrDecodeAngFreq;
         DbLastFreqShift = DbFreqShift;

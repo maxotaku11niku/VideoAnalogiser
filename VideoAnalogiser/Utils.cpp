@@ -9,12 +9,11 @@
 #include <math.h>
 #include <cstring>
 #include "Utils.h"
-#include <omp.h>
 
 #define FILTER_MAKE_INTEGRAL_POINTS 16384
 #define FILTER_MAKE_INTEGRAL_POINTS_DBL 16384.0
-#define FILTER_MAGNITUDE_TOLERANCE 0.001
-#define FILTER_MAX_STEPS_TOLERANCE 6
+#define FILTER_MAGNITUDE_TOLERANCE 0.03
+#define FILTER_MAX_STEPS_TOLERANCE 7
 
 static inline double StandardFilter(double f, double attenuation)
 {
@@ -24,7 +23,7 @@ static inline double StandardFilter(double f, double attenuation)
 FIRFilter MakeFIRFilter(double sampleRate, int size, double center, double width, double attenuation)
 {
     int backport = 5;
-    double* outfir = new double[size + backport];
+    float* outfir = new float[size + backport];
     double integral = 0.0;
     double integpoint = 0.0;
     double freqpointbef = 0.0;
@@ -100,73 +99,66 @@ FIRFilter MakeFIRFilter(double sampleRate, int size, double center, double width
         }
     }
 
-    double* realOutFir = new double[truesize];
-    memcpy(realOutFir, &outfir[backport - truebackport], truesize * 8);
+    float* realOutFir = new float[truesize];
+    float* fromptr = &outfir[backport - truebackport];
+    float* toptr = realOutFir + truesize - 1;
+    //Reorder the filter here to aid in vectorising the inner loops of ApplyFIRFilter()
+    for (int i = 0; i < truesize; i++)
+    {
+        *toptr-- = *fromptr++;
+    }
     delete[] outfir;
 
-    //Returning this pointer as the zero point to simplify addressing the filter components (i.e. filter[-2] is valid and points to the filter component 2 samples ahead of the current point)
-    return { realOutFir + truebackport, truesize - truebackport,  truebackport };
-}
-
-FIRFilter MakeNotch(FIRFilter filt) //This function has become redundant as it was found to be suboptimal for the overall process
-{
-    double* outdat = new double[filt.len + filt.backport];
-    double* realoutdat = outdat + filt.backport;
-    FIRFilter outfir = { realoutdat, filt.len, filt.backport };
-    realoutdat[0] = 1.0 - filt.filter[0];
-    for (int i = 1; i < outfir.len; i++)
-    {
-        realoutdat[i] = -filt.filter[i];
-    }
-    for (int i = 1; i <= outfir.backport; i++)
-    {
-        realoutdat[-i] = -filt.filter[-i];
-    }
-
-    return outfir;
+    //Returning this pointer as the zero point to simplify addressing the filter components (i.e. filter[-2] is valid and points to the filter component 2 samples behind the current point)
+    return { realOutFir + truesize - truebackport - 1, truesize - truebackport,  truebackport };
 }
 
 SignalPack ApplyFIRFilter(SignalPack signal, FIRFilter fir)
 {
-    double* output = new double[signal.len];
-    double outsig = 0.0;
+    float* output = new float[signal.len];
+    float outsig = 0.0f;
 
     for (int i = 0; i < fir.len; i++) //Ease in
     {
-        outsig = 0.0;
-        for (int j = -fir.backport; j <= i; j++)
+        outsig = 0.0f;
+        const float* insig = signal.signal + i;
+        #pragma omp simd
+        for (int j = -i; j <= fir.backport; j++)
         {
-            outsig += signal.signal[i - j] * fir.filter[j];
+            outsig += insig[j] * fir.filter[j];
         }
         output[i] = outsig;
     }
 
     const int parStart = fir.len;
     const int parEnd = signal.len - fir.backport;
-    const int filtStart = -fir.backport;
-    const int filtEnd = fir.len;
-    const double* const sig = signal.signal;
-    const double* const filt = fir.filter;
+    const int filtStart = -fir.len + 1;
+    const int filtEnd = fir.backport;
+    const float* const sig = signal.signal;
+    const float* const filt = fir.filter;
 
     //Main loop. This is embarrasingly parallel
-    omp_set_num_threads(omp_get_max_threads());
-    #pragma omp parallel for shared(sig, filt, output, filtStart, filtEnd)
+    #pragma omp parallel for
     for (int i = parStart; i < parEnd; i++)
     {
-        double outsigin = 0.0;
-        for (int j = filtStart; j < filtEnd; j++)
+        float outsigin = 0.0f;
+        const float* insig = sig + i;
+        #pragma omp simd
+        for (int j = filtStart; j <= filtEnd; j++)
         {
-            outsigin += sig[i - j] * filt[j];
+            outsigin += insig[j] * filt[j];
         }
         output[i] = outsigin;
     }
 
     for (int i = signal.len - fir.backport; i < signal.len; i++) //Ease out
     {
-        outsig = 0.0;
-        for (int j = i - signal.len + 1; j <= fir.len; j++)
+        outsig = 0.0f;
+        const float* insig = signal.signal + i;
+        #pragma omp simd
+        for (int j = -fir.len; j < signal.len - i; j++)
         {
-            outsig += signal.signal[i - j] * fir.filter[j];
+            outsig += insig[j] * fir.filter[j];
         }
         output[i] = outsig;
     }
@@ -176,10 +168,10 @@ SignalPack ApplyFIRFilter(SignalPack signal, FIRFilter fir)
 
 SignalPack ApplyFIRFilterNotch(SignalPack signal, FIRFilter fir)
 {
-    double* shiftfir = new double[fir.len + fir.backport];
-    double* actualShiftfir = shiftfir + fir.backport;
+    float* shiftfir = new float[fir.len + fir.backport];
+    float* actualShiftfir = shiftfir + fir.len - 1;
 
-    for (int i = -fir.backport; i < fir.len; i++)
+    for (int i = -fir.len + 1; i <= fir.backport; i++)
     {
         actualShiftfir[i] = -fir.filter[i];
     }
@@ -192,10 +184,10 @@ SignalPack ApplyFIRFilterNotch(SignalPack signal, FIRFilter fir)
 
 SignalPack ApplyFIRFilterCrosstalk(SignalPack signal, FIRFilter fir, double crosstalk)
 {
-    double* shiftfir = new double[fir.len + fir.backport];
-    double* actualShiftfir = shiftfir + fir.backport;
+    float* shiftfir = new float[fir.len + fir.backport];
+    float* actualShiftfir = shiftfir + fir.len - 1;
 
-    for (int i = -fir.backport; i < fir.len; i++)
+    for (int i = -fir.len + 1; i <= fir.backport; i++)
     {
         actualShiftfir[i] = fir.filter[i] * (1.0 - crosstalk);
     }
@@ -208,11 +200,11 @@ SignalPack ApplyFIRFilterCrosstalk(SignalPack signal, FIRFilter fir, double cros
 
 SignalPack ApplyFIRFilterShift(SignalPack signal, FIRFilter fir, double sampleTime, double centerangfreq)
 {
-    double* shiftfir = new double[fir.len + fir.backport];
-    double* actualShiftfir = shiftfir + fir.backport;
+    float* shiftfir = new float[fir.len + fir.backport];
+    float* actualShiftfir = shiftfir + fir.len - 1;
     double time = 0.0;
 
-    for (int i = -fir.backport; i < fir.len; i++)
+    for (int i = -fir.len + 1; i <= fir.backport; i++)
     {
         time = i * sampleTime;
         actualShiftfir[i] = fir.filter[i] * cos(centerangfreq * time) * 2.0; //This takes advantage of a crucial property of Fourier transforms
@@ -225,10 +217,10 @@ SignalPack ApplyFIRFilterShift(SignalPack signal, FIRFilter fir, double sampleTi
 
 SignalPack ApplyFIRFilterNotchCrosstalk(SignalPack signal, FIRFilter fir, double crosstalk)
 {
-    double* shiftfir = new double[fir.len + fir.backport];
-    double* actualShiftfir = shiftfir + fir.backport;
+    float* shiftfir = new float[fir.len + fir.backport];
+    float* actualShiftfir = shiftfir + fir.len - 1;
 
-    for (int i = -fir.backport; i < fir.len; i++)
+    for (int i = -fir.len + 1; i <= fir.backport; i++)
     {
         actualShiftfir[i] = fir.filter[i] * (crosstalk - 1.0);
     }
@@ -241,11 +233,11 @@ SignalPack ApplyFIRFilterNotchCrosstalk(SignalPack signal, FIRFilter fir, double
 
 SignalPack ApplyFIRFilterCrosstalkShift(SignalPack signal, FIRFilter fir, double crosstalk, double sampleTime, double centerangfreq)
 {
-    double* shiftfir = new double[fir.len + fir.backport];
-    double* actualShiftfir = shiftfir + fir.backport;
+    float* shiftfir = new float[fir.len + fir.backport];
+    float* actualShiftfir = shiftfir + fir.len - 1;
     double time = 0.0;
 
-    for (int i = -fir.backport; i < fir.len; i++)
+    for (int i = -fir.len + 1; i <= fir.backport; i++)
     {
         time = i * sampleTime;
         actualShiftfir[i] = fir.filter[i] * cos(centerangfreq * time) * (1.0 - crosstalk) * 2.0;
@@ -259,11 +251,11 @@ SignalPack ApplyFIRFilterCrosstalkShift(SignalPack signal, FIRFilter fir, double
 
 SignalPack ApplyFIRFilterNotchShift(SignalPack signal, FIRFilter fir, double sampleTime, double centerangfreq)
 {
-    double* shiftfir = new double[fir.len + fir.backport];
-    double* actualShiftfir = shiftfir + fir.backport;
+    float* shiftfir = new float[fir.len + fir.backport];
+    float* actualShiftfir = shiftfir + fir.len - 1;
     double time = 0.0;
 
-    for (int i = -fir.backport; i < fir.len; i++)
+    for (int i = -fir.len + 1; i <= fir.backport; i++)
     {
         time = i * sampleTime;
         actualShiftfir[i] = -fir.filter[i] * cos(centerangfreq * time) * 2.0;
@@ -277,11 +269,11 @@ SignalPack ApplyFIRFilterNotchShift(SignalPack signal, FIRFilter fir, double sam
 
 SignalPack ApplyFIRFilterNotchCrosstalkShift(SignalPack signal, FIRFilter fir, double crosstalk, double sampleTime, double centerangfreq)
 {
-    double* shiftfir = new double[fir.len + fir.backport];
-    double* actualShiftfir = shiftfir + fir.backport;
+    float* shiftfir = new float[fir.len + fir.backport];
+    float* actualShiftfir = shiftfir + fir.len - 1;
     double time = 0.0;
 
-    for (int i = -fir.backport; i < fir.len; i++)
+    for (int i = -fir.len + 1; i <= fir.backport; i++)
     {
         time = i * sampleTime;
         actualShiftfir[i] = fir.filter[i] * cos(centerangfreq * time) * (crosstalk - 1.0) * 2.0;

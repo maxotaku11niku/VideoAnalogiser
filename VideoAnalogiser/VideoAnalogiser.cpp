@@ -5,7 +5,6 @@
 * This software uses code of FFmpeg (http://ffmpeg.org) licensed under the LGPLv2.1 (http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html)
 */
 
-#include <omp.h>
 #include "VideoAnalogiser.h"
 #include "ConversionEngine.h"
 
@@ -19,7 +18,7 @@ void ShowHelp()
 	std::cout << "-bsyshelp [system]: Dumps parameters relevant to the given broadcast system, then quits." << std::endl;
 	std::cout << "-csys [system]: Use given colour system. This option corresponds to the familiar PAL, NTSC and SECAM standards. Valid values: pal, ntsc, secam. Defaults to pal." << std::endl;
 	std::cout << "-vhs: Use the appropriate VHS standard for the given colour standard (VHS 525 line for NTSC, VHS 625 line for PAL and SECAM). Overrides -bsys." << std::endl;
-	std::cout << "-br [kb/s]: Output video bitrate in kb/s. Make this higher if your output is expected to be pretty noisy, recommended values 5000 - 20000. Defaults to 10000." << std::endl;
+	std::cout << "-br [kb/s]: Output video bitrate in kb/s. Make this higher if your output is expected to be pretty noisy, recommended values 2000 - 20000. Defaults to 5000." << std::endl;
 	std::cout << "-preview: Generate 300 frames of footage from the start of the video to preview the current settings." << std::endl;
 	std::cout << "-noise [amount]: Magnitude of signal noise, recommended values 0.0 - 0.5. Defaults to 0.0." << std::endl;
 	std::cout << "-jitter [amount]: Magnitude of scanline jitter, recommended values 0.0 - 0.01. Defaults to 0.0." << std::endl;
@@ -82,7 +81,7 @@ int main(int argc, char** argv)
 	bool bSysChosen = false;
 	bool ezvhs = false;
 	bool preview = false;
-	double kbitrate = 10000.0;
+	double kbitrate = 5000.0;
 	double noise = 0.0;
 	double noiseExp = 0.5;
 	double crosstalk = 0.0;
@@ -228,7 +227,6 @@ int main(int argc, char** argv)
 	std::cout << "Encoding to: " << bSysStr << " " << cSysStr << std::endl;
 	std::cout << "Initialising engine..." << std::endl;
 	ConversionEngine convEng = ConversionEngine(bSys, cSys, dResonance, pWidthMult, phaseNoise, jitter, noiseExp);
-	omp_set_dynamic(true);
 	convEng.OpenForDecodeVideo(argv[1]);
 	std::cout << "Begin encoding." << std::endl;
 	convEng.EncodeVideo(argv[2], preview, kbitrate, noise, crosstalk);

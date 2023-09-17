@@ -52,7 +52,7 @@ PALSystem::PALSystem(BroadcastSystems sys, bool interlace, double resonance, dou
 	YCCtoRGBConversionMatrix = YUVtoRGBConversionMatrix;
 
 	interlaced = interlace;
-	activeWidth = (int)((8.0 / 3.0) * bcParams->videoScanlines);
+	activeWidth = FIXEDWIDTH;
 	fieldScanlines = interlace ? bcParams->videoScanlines / 2 : bcParams->videoScanlines;
 	boundaryPoints = new int[fieldScanlines + 1]; //Boundaries of the scanline signals
 	activeSignalStarts = new int[fieldScanlines]; //Start points of the active parts
@@ -71,10 +71,10 @@ PALSystem::PALSystem(BroadcastSystems sys, bool interlace, double resonance, dou
 	lumaprefir = MakeFIRFilter(sampleRate, 256, 0.0, 2.0 * bcParams->mainBandwidth * prefilterMult, PREFILTER_RESONANCE);
 	chromaprefir = MakeFIRFilter(sampleRate, 256, 0.0, 2.0 * bcParams->chromaBandwidthLower * prefilterMult, PREFILTER_RESONANCE);
 
-	USignal = new double[signalLen];
-	VSignal = new double[signalLen];
-	USignalPreAlt = new double[signalLen];
-	VSignalPreAlt = new double[signalLen];
+	USignal = new float[signalLen];
+	VSignal = new float[signalLen];
+	USignalPreAlt = new float[signalLen];
+	VSignalPreAlt = new float[signalLen];
 
 	jitGen = new MultiOctaveNoiseGen(11, 0.0, scanlineJitter * activeWidth, noiseExponent);
 	phNoiseGen = new MultiOctaveNoiseGen(11, 0.0, phaseNoise, noiseExponent);
@@ -85,7 +85,7 @@ SignalPack PALSystem::Encode(FrameData imgdat, int interlaceField)
 	double realActiveTime = bcParams->activeTime;
 	double realScanlineTime = 1.0 / (double)(fieldScanlines * bcParams->framerate);
 	int signalLen = (int)(imgdat.width * fieldScanlines * (realScanlineTime/realActiveTime)); //To get a good analogue feel, we must limit the vertical resolution; the horizontal resolution will be limited as we decode the distorted signal.
-	double* signalOut = new double[signalLen];
+	float* signalOut = new float[signalLen];
 	double R = 0.0;
 	double G = 0.0;
 	double B = 0.0;
@@ -116,18 +116,18 @@ SignalPack PALSystem::Encode(FrameData imgdat, int interlaceField)
 	int w = imgdat.width;
 	int col;
 	double carrierAngFreq = bcParams->carrierAngFreq;
-	SignalPack Ysig = { new double[signalLen], signalLen };
-	SignalPack Usig = { new double[signalLen], signalLen };
-	SignalPack Vsig = { new double[signalLen], signalLen };
+	SignalPack Ysig = { new float[signalLen], signalLen };
+	SignalPack Usig = { new float[signalLen], signalLen };
+	SignalPack Vsig = { new float[signalLen], signalLen };
 	//Make component signals
 	for (int i = 0; i < fieldScanlines; i++) //Only generate active scanlines
 	{
 		currentScanline = interlaced ? (i * 2 + interlaceField) % bcParams->videoScanlines : i;
 		for (int j = 0; j < activeSignalStarts[i]; j++) //Front porch, ignore sync signal because we don't see its results
 		{
-			Ysig.signal[pos] = 0.0;
-			Usig.signal[pos] = 0.0;
-			Vsig.signal[pos] = 0.0;
+			Ysig.signal[pos] = 0.0f;
+			Usig.signal[pos] = 0.0f;
+			Vsig.signal[pos] = 0.0f;
 			pos++;
 		}
 		for (int j = 0; j < w; j++) //Active signal
@@ -149,9 +149,9 @@ SignalPack PALSystem::Encode(FrameData imgdat, int interlaceField)
 		}
 		while (pos < boundaryPoints[i + 1]) //Back porch, ignore sync signal because we don't see its results
 		{
-			Ysig.signal[pos] = 0.0;
-			Usig.signal[pos] = 0.0;
-			Vsig.signal[pos] = 0.0;
+			Ysig.signal[pos] = 0.0f;
+			Usig.signal[pos] = 0.0f;
+			Vsig.signal[pos] = 0.0f;
 			pos++;
 		}
 	}

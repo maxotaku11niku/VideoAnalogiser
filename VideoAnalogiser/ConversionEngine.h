@@ -18,7 +18,6 @@ extern "C"
 #include "ffmpeg/libswscale/swscale.h"
 }
 
-
 class ConversionEngine
 {
 public:
@@ -28,6 +27,7 @@ public:
     void EncodeVideo(const char* outFileName, bool preview, double kbps, double noise, double crosstalk);
 	void CloseDecoder();
 private:
+    char* GenerateTextProgressBar(double progress, int fullLength);
     ColourSystem* analogueEnc = NULL;
 	AVFormatContext* infmtcontext = NULL;
 	AVCodecContext* invidcodcontext = NULL;

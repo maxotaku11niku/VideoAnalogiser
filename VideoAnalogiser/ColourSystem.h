@@ -11,6 +11,7 @@
 #include "Utils.h"
 
 #define PREFILTER_RESONANCE 2.0
+#define FIXEDWIDTH 860
 
 typedef struct
 {

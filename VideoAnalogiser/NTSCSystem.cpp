@@ -52,7 +52,7 @@ NTSCSystem::NTSCSystem(BroadcastSystems sys, bool interlace, double resonance, d
     YCCtoRGBConversionMatrix = YIQtoRGBConversionMatrix;
 
     interlaced = interlace;
-    activeWidth = (int)((8.0 / 3.0) * bcParams->videoScanlines);
+    activeWidth = FIXEDWIDTH;
     fieldScanlines = interlace ? bcParams->videoScanlines / 2 : bcParams->videoScanlines;
     boundaryPoints = new int[fieldScanlines + 1]; //Boundaries of the scanline signals
     activeSignalStarts = new int[fieldScanlines]; //Start points of the active parts
@@ -82,7 +82,7 @@ SignalPack NTSCSystem::Encode(FrameData imgdat, int interlaceField)
     double realActiveTime = bcParams->activeTime;
     double realScanlineTime = 1.0 / (double)(fieldScanlines * bcParams->framerate);
     int signalLen = (int)(imgdat.width * fieldScanlines * (realScanlineTime / realActiveTime)); //To get a good analogue feel, we must limit the vertical resolution; the horizontal resolution will be limited as we decode the distorted signal.
-    double* signalOut = new double[signalLen];
+    float* signalOut = new float[signalLen];
     double R = 0.0;
     double G = 0.0;
     double B = 0.0;
@@ -112,18 +112,18 @@ SignalPack NTSCSystem::Encode(FrameData imgdat, int interlaceField)
     int w = imgdat.width;
     int col;
     double carrierAngFreq = bcParams->carrierAngFreq;
-    SignalPack Ysig = { new double[signalLen], signalLen };
-    SignalPack Isig = { new double[signalLen], signalLen };
-    SignalPack Qsig = { new double[signalLen], signalLen };
+    SignalPack Ysig = { new float[signalLen], signalLen };
+    SignalPack Isig = { new float[signalLen], signalLen };
+    SignalPack Qsig = { new float[signalLen], signalLen };
     //Make component signals
     for (int i = 0; i < fieldScanlines; i++) //Only generate active scanlines
     {
         currentScanline = interlaced ? (i * 2 + interlaceField) % bcParams->videoScanlines : i;
         for (int j = 0; j < activeSignalStarts[i]; j++) //Front porch, ignore sync signal because we don't see its results
         {
-            Ysig.signal[pos] = 0.0;
-            Isig.signal[pos] = 0.0;
-            Qsig.signal[pos] = 0.0;
+            Ysig.signal[pos] = 0.0f;
+            Isig.signal[pos] = 0.0f;
+            Qsig.signal[pos] = 0.0f;
             pos++;
             time = pos * sampleTime;
         }
@@ -147,9 +147,9 @@ SignalPack NTSCSystem::Encode(FrameData imgdat, int interlaceField)
         }
         while (pos < boundaryPoints[i + 1]) //Back porch, ignore sync signal because we don't see its results
         {
-            Ysig.signal[pos] = 0.0;
-            Isig.signal[pos] = 0.0;
-            Qsig.signal[pos] = 0.0;
+            Ysig.signal[pos] = 0.0f;
+            Isig.signal[pos] = 0.0f;
+            Qsig.signal[pos] = 0.0f;
             pos++;
             time = pos * sampleTime;
         }
