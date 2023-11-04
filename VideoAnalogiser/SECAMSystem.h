@@ -47,4 +47,8 @@ private:
     float* DbSignalQ;
     float* DrSignalI;
     float* DrSignalQ;
+    float* DbSignalC;
+    float* DbSignalS;
+    float* DrSignalC;
+    float* DrSignalS;
 };

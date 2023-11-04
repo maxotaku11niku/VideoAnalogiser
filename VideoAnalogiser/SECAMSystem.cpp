@@ -73,10 +73,16 @@ SECAMSystem::SECAMSystem(BroadcastSystems sys, bool interlace, double resonance,
     lumaprefir = MakeFIRFilter(sampleRate, 256, 0.0, 2.0 * bcParams->mainBandwidth * prefilterMult, PREFILTER_RESONANCE);
     chromaprefir = MakeFIRFilter(sampleRate, 256, 0.0, 2.0 * bcParams->chromaBandwidthLower * prefilterMult, PREFILTER_RESONANCE);
 
+    /*/
     DbSignalI = new float[signalLen];
     DbSignalQ = new float[signalLen];
     DrSignalI = new float[signalLen];
     DrSignalQ = new float[signalLen];
+    DbSignalC = new float[signalLen];
+    DbSignalS = new float[signalLen];
+    DrSignalC = new float[signalLen];
+    DrSignalS = new float[signalLen];
+    //*/
 
     jitGen = new MultiOctaveNoiseGen(11, 0.0, scanlineJitter * activeWidth, noiseExponent);
     phNoiseGen = new MultiOctaveNoiseGen(11, 0.0, phaseNoise, noiseExponent);
@@ -230,15 +236,15 @@ FrameData SECAMSystem::Decode(SignalPack signal, int interlaceField, double cros
     SignalPack newSignal = ApplyFIRFilter(signal, mainfir);
     
     /*/
-    std::uniform_real_distribution<> phdist(-phaseNoise, phaseNoise);
     double time = 0.0;
     double phOffs = 0.0;
     double scAngFreqDb = bcParams->carrierAngFreqDb;
     double scAngFreqDr = bcParams->carrierAngFreqDr;
+    double scAngFreqShiftDb = bcParams->deltaAngFreqDb;
+    double scAngFreqShiftDr = bcParams->deltaAngFreqDr;
     for (int i = 0; i < fieldScanlines; i++)
     {
-        phOffs = phdist(rng);
-        phOffs += phaseError;
+        phOffs = phNoiseGen->GenNoise();
         while (pos < boundaryPoints[i + 1])
         {
             time = pos * sampleTime;
@@ -255,16 +261,28 @@ FrameData SECAMSystem::Decode(SignalPack signal, int interlaceField, double cros
     SignalPack filtDrSignalI = ApplyFIRFilter({ DrSignalI, signal.len }, drfir);
     SignalPack filtDrSignalQ = ApplyFIRFilter({ DrSignalQ, signal.len }, drfir);
 
-    double diffI = 0.0;
-    double diffQ = 0.0;
+    time = 0.0;
+    double recAngFreq = 10000000.0;
+    for (int i = 0; i < signal.len; i++)
+    {
+        time = i * sampleTime;
+        DbSignalC[i] = (2 / 0.115) * (sin(recAngFreq * time) * filtDbSignalI.signal[i] + cos(recAngFreq * time) * filtDbSignalQ.signal[i]);
+        DbSignalS[i] = (2 / 0.115) * (sin(recAngFreq * time) * filtDbSignalQ.signal[i] - cos(recAngFreq * time) * filtDbSignalI.signal[i]);
+        DrSignalC[i] = (2 / 0.115) * (sin(recAngFreq * time) * filtDrSignalI.signal[i] + cos(recAngFreq * time) * filtDrSignalQ.signal[i]);
+        DrSignalS[i] = (2 / 0.115) * (sin(recAngFreq * time) * filtDrSignalQ.signal[i] - cos(recAngFreq * time) * filtDrSignalI.signal[i]);
+    }
+
+    double diffC = 0.0;
+    double diffS = 0.0;
+    double sampleRate = (double)activeWidth / realActiveTime;
     for (int i = 1; i < signal.len; i++)
     {
-        diffI = filtDbSignalI.signal[i] - filtDbSignalI.signal[i - 1];
-        diffQ = filtDbSignalQ.signal[i] - filtDbSignalQ.signal[i - 1];
-        DbSignal.signal[i] = sqrt(diffI * diffI + diffQ * diffQ) * 100.0;
-        diffI = filtDrSignalI.signal[i] - filtDrSignalI.signal[i - 1];
-        diffQ = filtDrSignalQ.signal[i] - filtDrSignalQ.signal[i - 1];
-        DrSignal.signal[i] = sqrt(diffI * diffI + diffQ * diffQ) * 100.0;
+        diffC = (DbSignalC[i] - DbSignalC[i - 1]) * sampleRate;
+        diffS = (DbSignalS[i] - DbSignalS[i - 1]) * sampleRate;
+        DbSignal.signal[i] = (((sqrt(diffC * diffC + diffS * diffS) - recAngFreq) / (scAngFreqShiftDb)) + 0.58);
+        diffC = (DrSignalC[i] - DrSignalC[i - 1]) * sampleRate;
+        diffS = (DrSignalS[i] - DrSignalS[i - 1]) * sampleRate;
+        DrSignal.signal[i] = (((sqrt(diffC * diffC + diffS * diffS) - recAngFreq) / (scAngFreqShiftDr)) + 0.58);
     }
     //*/
 

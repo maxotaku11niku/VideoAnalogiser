@@ -144,10 +144,11 @@ void ConversionEngine::EncodeVideo(const char* outFileName, bool preview, double
 	outvidcodcontext->bit_rate = (int64_t)(kbps * 1024.0);
 	outvidcodcontext->width = outWidth;
 	outvidcodcontext->height = outHeight;
+	outvidcodcontext->flags |= AV_CODEC_FLAG_INTERLACED_DCT | AV_CODEC_FLAG_INTERLACED_ME; //Interlacing forced on
 	outvidstream->time_base = analogueEnc->bcParams->ratFrametime;
 	outvidcodcontext->time_base = analogueEnc->bcParams->ratFrametime;
 	outvidcodcontext->gop_size = 12;
-	outvidcodcontext->pix_fmt = AVPixelFormat::AV_PIX_FMT_YUV422P; //just use this so that the output is lossless
+	outvidcodcontext->pix_fmt = AVPixelFormat::AV_PIX_FMT_YUV422P; //just use this so that the output is basically lossless
 	if (outfmtcontext->oformat->flags & AVFMT_GLOBALHEADER) outvidcodcontext->flags |= AV_CODEC_FLAG_GLOBAL_HEADER;
 
 	//Setup output audio stream
@@ -171,6 +172,7 @@ void ConversionEngine::EncodeVideo(const char* outFileName, bool preview, double
 	outcurFrame->format = AVPixelFormat::AV_PIX_FMT_YUV422P;
 	outcurFrame->width = outWidth;
 	outcurFrame->height = outHeight;
+	outcurFrame->interlaced_frame = true; //Interlacing forced on
 	av_frame_get_buffer(outcurFrame, 0);
 	avcodec_parameters_from_context(outvidstream->codecpar, outvidcodcontext);
 	avcodec_open2(outaudcodcontext, acod, &opt);
@@ -212,15 +214,15 @@ void ConversionEngine::EncodeVideo(const char* outFileName, bool preview, double
 	FrameData finData;
 	double curTime = 0.0;
 	double refTime = 0.0;
-	int totalNumFrames;
-	if (preview) totalNumFrames = 300;
-	else totalNumFrames = (int)((((double)(invidstream->duration)) * ((double)invidstream->time_base.num)) / ((double)invidstream->time_base.den * actualFrametime));
+	int totalNumFrames = (int)((((double)(invidstream->duration)) * ((double)invidstream->time_base.num)) / ((double)invidstream->time_base.den * actualFrametime));
+	if (preview && totalNumFrames >= 300) totalNumFrames = 300;
 	std::mt19937_64 rng;
 	std::uniform_real_distribution<> ndist(-noise, noise);
 	char progString[256];
 	for (int i = 0; i < totalNumFrames; i++)
 	{
 		av_frame_make_writable(outcurFrame);
+		outcurFrame->interlaced_frame = true; //Interlacing forced on
 		sig = analogueEnc->Encode({ (int*)vidscaleDataForAnalogue[0], FIXEDWIDTH, outHeight }, interlaceField);
 		for (int j = 0; j < sig.len; j++) //Will be replaced with a generic signal transform function soon
 		{
