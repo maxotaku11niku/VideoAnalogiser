@@ -8,7 +8,21 @@ The source code for the particular version of the FFmpeg libraries (libav\*) I u
 
 # Getting started
 
-Invoke the program with `VideoAnalogiser`. Invoking without arguments or with `-h` will show you some basic help and remind you of the options available to you. To get started, use `VideoAnalogiser [input filename] [output filename] -csys [pal/ntsc/secam] <-vhs> -br [bitrate in kb/s]` as a simple starting command. `-preview` is useful for seeing what your chosen options will do before committing to a long encoding process.
+Invoke the program with `videoanalogiser`. Invoking without arguments or with `-h` will show you some basic help and remind you of the options available to you. To get started, use `videoanalogiser [input filename] [output filename] -csys [pal/ntsc/secam] <-vhs> -br [bitrate in kb/s]` as a simple starting command. `-preview` is useful for seeing what your chosen options will do before committing to a long encoding process.
 
 # Building
-This is a CMake project, so in theory all you would need to do is just git clone and everything works?
+Clone this repository and invoke the makefile with `make` to build a standard executable for the platform you're compiling on. Currently the new build process is only known to work on Linux, and you'll need the following libraries installed on your system with their dev tools:
+
+- libavcodec
+- libavformat
+- libavutil
+- libswscale
+- libswresample
+
+Other make commands can be used to do other things.
+
+- `make default` : Redundant, just use `make`. Builds for the current platform, and assumes a generic processor (i.e. no extensions).
+- `make native` : Builds for the specific platform and processor, including extensions. Use this to build a nice faster executable for yourself.
+- `make debug` : Builds for the current platform, making an executable ideal for debugging.
+- `make clean` : Cleans the output directories, use this before switching to another build option.
+- `make install-linux` : Copies the output executable to `/usr/local/bin/`, requiring root permissions.

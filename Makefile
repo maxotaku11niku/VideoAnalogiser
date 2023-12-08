@@ -56,7 +56,7 @@ clean : $(BUILD) $(TARGET)
 
 #Copies output executable to /usr/bin/ (with confirmation)
 install-linux : $(TARGET)/videoanalogiser
-	sudo cp $^ /usr/bin/
+	sudo cp $^ /usr/local/bin/
 
 $(BUILD) :
 	mkdir -p $(BUILD)
