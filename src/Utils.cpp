@@ -122,7 +122,6 @@ SignalPack ApplyFIRFilter(SignalPack signal, FIRFilter fir)
     {
         outsig = 0.0f;
         const float* insig = signal.signal + i;
-        #pragma omp simd
         for (int j = -i; j <= fir.backport; j++)
         {
             outsig += insig[j] * fir.filter[j];
@@ -143,7 +142,6 @@ SignalPack ApplyFIRFilter(SignalPack signal, FIRFilter fir)
     {
         float outsigin = 0.0f;
         const float* insig = sig + i;
-        #pragma omp simd
         for (int j = filtStart; j <= filtEnd; j++)
         {
             outsigin += insig[j] * filt[j];
@@ -155,7 +153,6 @@ SignalPack ApplyFIRFilter(SignalPack signal, FIRFilter fir)
     {
         outsig = 0.0f;
         const float* insig = signal.signal + i;
-        #pragma omp simd
         for (int j = -fir.len; j < signal.len - i; j++)
         {
             outsig += insig[j] * fir.filter[j];
