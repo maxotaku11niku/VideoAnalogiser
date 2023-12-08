@@ -12,10 +12,10 @@
 
 extern "C"
 {
-#include "ffmpeg/libavcodec/avcodec.h"
-#include "ffmpeg/libavformat/avformat.h"
-#include "ffmpeg/libswresample/swresample.h"
-#include "ffmpeg/libswscale/swscale.h"
+#include <libavcodec/avcodec.h>
+#include <libavformat/avformat.h>
+#include <libswresample/swresample.h>
+#include <libswscale/swscale.h>
 }
 
 class ConversionEngine
@@ -27,7 +27,7 @@ public:
     void EncodeVideo(const char* outFileName, bool preview, double kbps, double noise, double crosstalk);
 	void CloseDecoder();
 private:
-    char* GenerateTextProgressBar(double progress, int fullLength);
+    void GenerateTextProgressBar(double progress, int fullLength, char* progBarChars);
     ColourSystem* analogueEnc = NULL;
 	AVFormatContext* infmtcontext = NULL;
 	AVCodecContext* invidcodcontext = NULL;

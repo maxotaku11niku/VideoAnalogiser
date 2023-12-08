@@ -9,7 +9,7 @@
 
 extern "C"
 {
-#include "ffmpeg/libavutil/rational.h"
+#include <libavutil/rational.h>
 }
 
 typedef struct

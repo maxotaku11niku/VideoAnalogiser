@@ -1,2 +1,5 @@
 .vs/
+.kdev4/
 out/
+bin/
+obj/

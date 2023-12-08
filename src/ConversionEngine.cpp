@@ -12,8 +12,8 @@
 
 extern "C"
 {
-#include "ffmpeg/libavutil/imgutils.h"
-#include "ffmpeg/libavutil/opt.h"
+#include <libavutil/imgutils.h>
+#include <libavutil/opt.h>
 }
 
 const char fillChars[5] = { ' ', '-', '=', '#', '@' };
@@ -103,11 +103,10 @@ void ConversionEngine::CloseDecoder()
 	avformat_close_input(&infmtcontext);
 }
 
-char* ConversionEngine::GenerateTextProgressBar(double progress, int fullLength)
+void ConversionEngine::GenerateTextProgressBar(double progress, int fullLength, char* progBarChars)
 {
 	if (progress < 0) progress = 0;
-	char progBarChars[256];
-	memset(progBarChars, 0, 256);
+	memset(progBarChars, 0, fullLength+1);
 	double logicalLength = fullLength * progress;
 	int filledLength = (int)logicalLength;
 	double partFill = logicalLength - filledLength;
@@ -115,13 +114,12 @@ char* ConversionEngine::GenerateTextProgressBar(double progress, int fullLength)
 	{
 		progBarChars[i] = '@';
 	}
-	if (progress >= 1.0) return progBarChars;
+	if (progress >= 1.0) return;
 	progBarChars[filledLength] = fillChars[(int)round((partFill * 4.0) + 0.5)];
 	for (int i = filledLength + 1; i < fullLength; i++)
 	{
 		progBarChars[i] = ' ';
 	}
-	return progBarChars;
 }
 
 void ConversionEngine::EncodeVideo(const char* outFileName, bool preview, double kbps, double noise, double crosstalk)
@@ -219,6 +217,7 @@ void ConversionEngine::EncodeVideo(const char* outFileName, bool preview, double
 	std::mt19937_64 rng;
 	std::uniform_real_distribution<> ndist(-noise, noise);
 	char progString[256];
+	char progBar[256];
 	for (int i = 0; i < totalNumFrames; i++)
 	{
 		av_frame_make_writable(outcurFrame);
@@ -289,7 +288,8 @@ void ConversionEngine::EncodeVideo(const char* outFileName, bool preview, double
 		delete[] finData.image;
 		sprintf(progString, "Wrote frame %u/%u ", i + 1, totalNumFrames);
 		strcat(progString, "[");
-		strcat(progString, GenerateTextProgressBar(((double)(i + 1)) / ((double)totalNumFrames), 78));
+		GenerateTextProgressBar(((double)(i + 1)) / ((double)totalNumFrames), 78, progBar);
+		strcat(progString, progBar);
 		strcat(progString, "]");
 		std::cout << progString << "\r";
 	}
