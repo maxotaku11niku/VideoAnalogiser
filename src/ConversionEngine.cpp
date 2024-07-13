@@ -150,18 +150,22 @@ void ConversionEngine::EncodeVideo(const char* outFileName, bool preview, double
 	if (outfmtcontext->oformat->flags & AVFMT_GLOBALHEADER) outvidcodcontext->flags |= AV_CODEC_FLAG_GLOBAL_HEADER;
 
 	//Setup output audio stream
-	const AVCodec* acod = avcodec_find_encoder(ofmt->audio_codec);
-	outaudPacket = av_packet_alloc();
-	outaudstream = avformat_new_stream(outfmtcontext, NULL);
-	outaudstream->id = outfmtcontext->nb_streams - 1;
-	outaudcodcontext = avcodec_alloc_context3(acod);
-	outaudcodcontext->codec_id = ofmt->audio_codec;
-	outaudcodcontext->bit_rate = 256000;
-	outaudcodcontext->sample_rate = inAudioRate;
-	outaudcodcontext->sample_fmt = AVSampleFormat::AV_SAMPLE_FMT_FLTP;
-	outlayout = AV_CHANNEL_LAYOUT_STEREO;
-	av_channel_layout_copy(&outaudcodcontext->ch_layout, &outlayout);
-	outaudstream->time_base = analogueEnc->bcParams->ratFrametime;
+	const AVCodec* acod;
+	if (audstreamIndex != AVERROR_STREAM_NOT_FOUND)
+	{
+		acod = avcodec_find_encoder(ofmt->audio_codec);
+		outaudPacket = av_packet_alloc();
+		outaudstream = avformat_new_stream(outfmtcontext, NULL);
+		outaudstream->id = outfmtcontext->nb_streams - 1;
+		outaudcodcontext = avcodec_alloc_context3(acod);
+		outaudcodcontext->codec_id = ofmt->audio_codec;
+		outaudcodcontext->bit_rate = 256000;
+		outaudcodcontext->sample_rate = inAudioRate;
+		outaudcodcontext->sample_fmt = AVSampleFormat::AV_SAMPLE_FMT_FLTP;
+		outlayout = AV_CHANNEL_LAYOUT_STEREO;
+		av_channel_layout_copy(&outaudcodcontext->ch_layout, &outlayout);
+		outaudstream->time_base = analogueEnc->bcParams->ratFrametime;
+	}
 
 	//Setup some other parameters
 	AVDictionary* opt = NULL;
@@ -173,24 +177,27 @@ void ConversionEngine::EncodeVideo(const char* outFileName, bool preview, double
 	outcurFrame->interlaced_frame = true; //Interlacing forced on
 	av_frame_get_buffer(outcurFrame, 0);
 	avcodec_parameters_from_context(outvidstream->codecpar, outvidcodcontext);
-	avcodec_open2(outaudcodcontext, acod, &opt);
-	outaudFrame = av_frame_alloc();
-	outaudFrame->format = AVSampleFormat::AV_SAMPLE_FMT_FLTP;
-	av_channel_layout_copy(&outaudFrame->ch_layout, &outlayout);
-	outaudFrame->sample_rate = outaudcodcontext->sample_rate;
-	outaudFrame->nb_samples = outaudcodcontext->frame_size;
-	av_frame_get_buffer(outaudFrame, 0);
-	avcodec_parameters_from_context(outaudstream->codecpar, outaudcodcontext);
+	if (audstreamIndex != AVERROR_STREAM_NOT_FOUND)
+	{
+		avcodec_open2(outaudcodcontext, acod, &opt);
+		outaudFrame = av_frame_alloc();
+		outaudFrame->format = AVSampleFormat::AV_SAMPLE_FMT_FLTP;
+		av_channel_layout_copy(&outaudFrame->ch_layout, &outlayout);
+		outaudFrame->sample_rate = outaudcodcontext->sample_rate;
+		outaudFrame->nb_samples = outaudcodcontext->frame_size;
+		av_frame_get_buffer(outaudFrame, 0);
+		avcodec_parameters_from_context(outaudstream->codecpar, outaudcodcontext);
 
-	//Setup resampler
-	resamplercontext = swr_alloc();
-	av_opt_set_chlayout(resamplercontext, "in_chlayout", &inChLayout, 0);
-	av_opt_set_int(resamplercontext, "in_sample_rate", inAudioRate, 0);
-	av_opt_set_sample_fmt(resamplercontext, "in_sample_fmt", inAudFormat, 0);
-	av_opt_set_chlayout(resamplercontext, "out_chlayout", &outaudFrame->ch_layout, 0);
-	av_opt_set_int(resamplercontext, "out_sample_rate", outaudcodcontext->sample_rate, 0);
-	av_opt_set_sample_fmt(resamplercontext, "out_sample_fmt", AVSampleFormat::AV_SAMPLE_FMT_FLTP, 0);
-	swr_init(resamplercontext);
+		//Setup resampler
+		resamplercontext = swr_alloc();
+		av_opt_set_chlayout(resamplercontext, "in_chlayout", &inChLayout, 0);
+		av_opt_set_int(resamplercontext, "in_sample_rate", inAudioRate, 0);
+		av_opt_set_sample_fmt(resamplercontext, "in_sample_fmt", inAudFormat, 0);
+		av_opt_set_chlayout(resamplercontext, "out_chlayout", &outaudFrame->ch_layout, 0);
+		av_opt_set_int(resamplercontext, "out_sample_rate", outaudcodcontext->sample_rate, 0);
+		av_opt_set_sample_fmt(resamplercontext, "out_sample_fmt", AVSampleFormat::AV_SAMPLE_FMT_FLTP, 0);
+		swr_init(resamplercontext);
+	}
 
 	//Open output filestream
 	avio_open(&outfmtcontext->pb, outFileName, AVIO_FLAG_WRITE);
@@ -264,7 +271,7 @@ void ConversionEngine::EncodeVideo(const char* outFileName, bool preview, double
 					sws_scale(scalercontextForAnalogue, vidorigData, vidorigLineSize, 0, inHeight, vidscaleDataForAnalogue, vidscaleLineSizeForAnalogue);
 				}
 			}
-			else if (incurPacket->stream_index == audstreamIndex)
+			else if (audstreamIndex != AVERROR_STREAM_NOT_FOUND && incurPacket->stream_index == audstreamIndex)
 			{
 				avcodec_send_packet(inaudcodcontext, incurPacket);
 				avcodec_receive_frame(inaudcodcontext, incurFrame);

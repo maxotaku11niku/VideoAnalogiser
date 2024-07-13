@@ -19,7 +19,8 @@ export FULLOFILES   := $(addprefix $(BUILD)/,$(OFILES))
 # Flags and libraries
 export CFLAGSBASE       := -fopenmp
 export CFLAGSDEBUG      := $(CFLAGSBASE) -Og
-export CFLAGSRELEASE    := $(CFLAGSBASE) -O3 -flto
+# Has all sorts of dangerous floating point assumptions for the sake of SPEED!
+export CFLAGSRELEASE    := $(CFLAGSBASE) -Ofast -flto -fno-trapping-math -fno-math-errno -ffast-math -ffp-contract=fast -ffinite-math-only -fno-signed-zeros -freciprocal-math
 export CFLAGS           := $(CFLAGSBASE)
 export CXXFLAGS         :=
 export LINKFLAGSBASE    :=
