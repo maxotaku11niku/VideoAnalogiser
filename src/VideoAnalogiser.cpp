@@ -1,6 +1,6 @@
 ﻿/*
 * VideoAnalogiser - Command Line Utility for Analogising Digital Videos
-* Maxim Hoxha 2023
+* Maxim Hoxha 2023-2026
 * Entry point and command line parsing
 * This software uses code of FFmpeg (http://ffmpeg.org) licensed under the LGPLv2.1 (http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html)
 */
@@ -27,6 +27,8 @@ void ShowHelp()
 	std::cout << "-psnoise [amount]: Colour decoder phase noise (per scanline), recommended values 0.0 - 3.0. Defaults to 0.0." << std::endl;
 	std::cout << "-crosstalk [amount]: Decoder luma-chroma crosstalk, recommended values 0.0 - 1.0. Defaults to 0.0." << std::endl;
 	std::cout << "-noiseexp [amount]: Jitter and scanline phase noise spectrum exponent (goes as f^-amount), recommended values 0.0 - 1.0. Defaults to 0.5." << std::endl;
+	std::cout << "-text [text]: Put VHS text in the top left." << std::endl;
+	std::cout << "-timetext: Put VHS text in the bottom left indicating the time since the video start (HH:MM:SS:FF)." << std::endl;
 }
 
 int main(int argc, char** argv)
@@ -34,7 +36,7 @@ int main(int argc, char** argv)
 	std::cout << "VideoAnalogiser - Command Line Utility for Analogising Digital Videos" << std::endl;
 	std::cout << "Version 0.9" << std::endl;
 	std::cout << "Ideal for faking the past :)" << std::endl;
-	std::cout << "Copyright (C) 2023 Maxim Hoxha" << std::endl << std::endl;
+	std::cout << "Copyright (C) 2023-2026 Maxim Hoxha" << std::endl << std::endl;
 	std::cout << "This program is free software: you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation, either version 3 of the License, or (at your option) any later version." << std::endl;
 	std::cout << "This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for more details." << std::endl;
 	std::cout << "You should have received a copy of the GNU General Public License along with this program. If not, see < https://www.gnu.org/licenses/>." << std::endl;
@@ -81,6 +83,7 @@ int main(int argc, char** argv)
 	bool bSysChosen = false;
 	bool ezvhs = false;
 	bool preview = false;
+	bool timeText = false;
 	double kbitrate = 5000.0;
 	double noise = 0.0;
 	double noiseExp = 0.5;
@@ -89,6 +92,7 @@ int main(int argc, char** argv)
 	double jitter = 0.0;
 	double dResonance = 5.0;
 	double pWidthMult = 0.7;
+	const char* tlText = nullptr;
 	for (int i = 3; i < argc; i++)
 	{
 		if (!strcmp(argv[i], "-csys"))
@@ -123,6 +127,10 @@ int main(int argc, char** argv)
 			else if (!strcmp(argv[i], "l")) bSys = BroadcastSystems::L;
 			else if (!strcmp(argv[i], "vhs525")) bSys = BroadcastSystems::VHS525;
 			else if (!strcmp(argv[i], "vhs625")) bSys = BroadcastSystems::VHS625;
+		}
+		else if (!strcmp(argv[i], "-timetext"))
+		{
+			timeText = true;
 		}
 		else if (!strcmp(argv[i], "-br"))
 		{
@@ -163,6 +171,11 @@ int main(int argc, char** argv)
 		{
 			i++;
 			noiseExp = strtod(argv[i], NULL);
+		}
+		else if (!strcmp(argv[i], "-text"))
+		{
+			i++;
+			tlText = argv[i];
 		}
 		else if (!strcmp(argv[i], "-h"))
 		{
@@ -229,7 +242,7 @@ int main(int argc, char** argv)
 	ConversionEngine convEng = ConversionEngine(bSys, cSys, dResonance, pWidthMult, phaseNoise, jitter, noiseExp);
 	convEng.OpenForDecodeVideo(argv[1]);
 	std::cout << "Begin encoding." << std::endl;
-	convEng.EncodeVideo(argv[2], preview, kbitrate, noise, crosstalk);
+	convEng.EncodeVideo(argv[2], preview, kbitrate, noise, crosstalk, tlText, timeText);
 	convEng.CloseDecoder();
 	std::cout << "Finished conversion!" << std::endl;
 

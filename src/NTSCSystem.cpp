@@ -1,12 +1,13 @@
 /*
 * VideoAnalogiser - Command Line Utility for Analogising Digital Videos
-* Maxim Hoxha 2023
+* Maxim Hoxha 2023-2026
 * NTSC encoder/decoder
 * This software uses code of FFmpeg (http://ffmpeg.org) licensed under the LGPLv2.1 (http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html)
 */
 
 #include <iostream>
 #include "NTSCSystem.h"
+#include "VHSFont.h"
 
 NTSCSystem::NTSCSystem(BroadcastSystems sys, bool interlace, double resonance, double prefilterMult, double phaseNoise, double scanlineJitter, double noiseExponent)
 {
@@ -77,7 +78,7 @@ NTSCSystem::NTSCSystem(BroadcastSystems sys, bool interlace, double resonance, d
     phNoiseGen = new MultiOctaveNoiseGen(11, 0.0, phaseNoise, noiseExponent);
 }
 
-SignalPack NTSCSystem::Encode(FrameData imgdat, int interlaceField)
+SignalPack NTSCSystem::Encode(FrameData imgdat, int field)
 {
     double realActiveTime = bcParams->activeTime;
     double realScanlineTime = 1.0 / (double)(fieldScanlines * bcParams->framerate);
@@ -90,7 +91,6 @@ SignalPack NTSCSystem::Encode(FrameData imgdat, int interlaceField)
     double I = 0.0;
     double time = 0.0;
     int pos = 0;
-    int polarity = 0;
     int remainingSync = 0;
     double sampleTime = realActiveTime / (double)imgdat.width;
 
@@ -111,6 +111,7 @@ SignalPack NTSCSystem::Encode(FrameData imgdat, int interlaceField)
     double finSamp = 0.0;
     int w = imgdat.width;
     int col;
+    int interlaceField = field & 1;
     double carrierAngFreq = bcParams->carrierAngFreq;
     SignalPack Ysig = { new float[signalLen], signalLen };
     SignalPack Isig = { new float[signalLen], signalLen };
@@ -159,11 +160,12 @@ SignalPack NTSCSystem::Encode(FrameData imgdat, int interlaceField)
     SignalPack filtYsig = ApplyFIRFilter(Ysig, lumaprefir);
     SignalPack filtIsig = ApplyFIRFilter(Isig, iprefir);
     SignalPack filtQsig = ApplyFIRFilter(Qsig, qprefir);
+    double phaseAdv = fmod(field * bcParams->carrierAngFreq * bcParams->scanlineTime * 2.0, 2.0 * M_PI);
     //Composite component signals
     for (int i = 0; i < signalLen; i++)
     {
         time = i * sampleTime;
-        signalOut[i] = filtYsig.signal[i] + filtQsig.signal[i] * sin(carrierAngFreq * time + chromaPhase) + filtIsig.signal[i] * cos(carrierAngFreq * time + chromaPhase); //Add chroma via QAM
+        signalOut[i] = filtYsig.signal[i] + filtQsig.signal[i] * sin(carrierAngFreq * time + chromaPhase + phaseAdv) + filtIsig.signal[i] * cos(carrierAngFreq * time + chromaPhase + phaseAdv); //Add chroma via QAM
     }
 
     delete[] Ysig.signal;
@@ -176,7 +178,7 @@ SignalPack NTSCSystem::Encode(FrameData imgdat, int interlaceField)
     return { signalOut, signalLen };
 }
 
-FrameData NTSCSystem::Decode(SignalPack signal, int interlaceField, double crosstalk)
+FrameData NTSCSystem::Decode(SignalPack signal, int field, double crosstalk)
 {
     double realActiveTime = bcParams->activeTime;
     double realScanlineTime = 1.0 / (double)(fieldScanlines * bcParams->framerate);
@@ -187,7 +189,6 @@ FrameData NTSCSystem::Decode(SignalPack signal, int interlaceField, double cross
     double Y = 0.0;
     double Q = 0.0;
     double I = 0.0;
-    int polarity = 0;
     int pos = 0;
     int posdel = 0;
     double sigNum = 0.0;
@@ -203,6 +204,7 @@ FrameData NTSCSystem::Decode(SignalPack signal, int interlaceField, double cross
 
     //Extract QAM colour signals
     double time = 0.0;
+    double phaseAdv = fmod(field * bcParams->carrierAngFreq * bcParams->scanlineTime * 2.0, 2.0 * M_PI);
     double phOffs = 0.0;
     for (int i = 0; i < fieldScanlines; i++)
     {
@@ -210,8 +212,8 @@ FrameData NTSCSystem::Decode(SignalPack signal, int interlaceField, double cross
         while (pos < boundaryPoints[i + 1])
         {
             time = pos * sampleTime;
-            QSignal.signal[pos] = QSignal.signal[pos] * sin(carrierAngFreq * time + phOffs) * 2.0;
-            ISignal.signal[pos] = ISignal.signal[pos] * cos(carrierAngFreq * time + phOffs) * 2.0;
+            QSignal.signal[pos] = QSignal.signal[pos] * sin(carrierAngFreq * time + phOffs + phaseAdv) * 2.0;
+            ISignal.signal[pos] = ISignal.signal[pos] * cos(carrierAngFreq * time + phOffs + phaseAdv) * 2.0;
             pos++;
         }
     }
@@ -268,4 +270,57 @@ FrameData NTSCSystem::Decode(SignalPack signal, int interlaceField, double cross
     delete[] finalISignal.signal;
 
     return writeToSurface;
+}
+
+SignalPack NTSCSystem::AddText(SignalPack signal, const char* text, double x, int y, bool yRelativeToBottom)
+{
+	unsigned char curCh = *text++;
+	int chCount = 0;
+	int startY = y;
+	if (yRelativeToBottom) startY = fieldScanlines - y;
+	int finalScanline = startY + 14;
+	if (finalScanline > fieldScanlines) finalScanline = fieldScanlines;
+	int actualStartY = startY;
+	if (actualStartY < 0) actualStartY = 0;
+	double realActiveTime = bcParams->activeTime;
+	double realScanlineTime = 1.0 / (double)(fieldScanlines * bcParams->framerate);
+	double scanlineLength = FIXEDWIDTH * (realScanlineTime/realActiveTime);
+	double scanlineIncPerSample = 1.0 / (scanlineLength * VHS_FONT_GLYPH_WIDTH);
+	float* sig = signal.signal;
+	while (curCh != 0)
+	{
+		if (curCh < 0x80)
+		{
+			const unsigned short* glyph = asciiPtrs[curCh];
+			for (int i = actualStartY; i < finalScanline; i++)
+			{
+				int sigStart = (int)((scanlineLength * x) + (chCount * (12.0/scanlineIncPerSample)) + (((double)i * (double)signal.len) / ((double)fieldScanlines)));
+				double sampleCounter = 0.0;
+				unsigned short glyphPart = glyph[i - startY];
+				while (sampleCounter < 12.0)
+				{
+					int glyphInd0 = (int)sampleCounter;
+					int glyphInd1 = glyphInd0 + 1;
+					float samplePart = (float)(sampleCounter - (double)glyphInd0);
+					float mSamplePart = 1.0f - samplePart;
+					unsigned short glyphPart0 = glyphPart >> (15 - glyphInd0);
+					glyphPart0 &= 0x01;
+					unsigned short glyphPart1 = glyphPart >> (15 - glyphInd1);
+					glyphPart1 &= 0x01;
+					float inSig = sig[sigStart];
+					float inSig0 = inSig;
+					float inSig1 = inSig;
+					if (glyphPart0) inSig0 = 1.0f;
+					if (glyphPart1) inSig1 = 1.0f;
+					sig[sigStart] = mSamplePart * inSig0 + samplePart * inSig1;
+					sigStart++;
+					sampleCounter += scanlineIncPerSample;
+				}
+			}
+			chCount++;
+		}
+		curCh = *text++;
+	}
+
+	return signal;
 }

@@ -1,6 +1,6 @@
 /*
 * VideoAnalogiser - Command Line Utility for Analogising Digital Videos
-* Maxim Hoxha 2023
+* Maxim Hoxha 2023-2026
 * Main conversion code
 * This software uses code of FFmpeg (http://ffmpeg.org) licensed under the LGPLv2.1 (http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html)
 */
@@ -122,7 +122,7 @@ void ConversionEngine::GenerateTextProgressBar(double progress, int fullLength, 
 	}
 }
 
-void ConversionEngine::EncodeVideo(const char* outFileName, bool preview, double kbps, double noise, double crosstalk)
+void ConversionEngine::EncodeVideo(const char* outFileName, bool preview, double kbps, double noise, double crosstalk, const char* tlText, bool timeTextDisplay)
 {
 	//Zero out the buffer just in case
 	for (int i = 0; i < FIXEDWIDTH * outHeight; i++)
@@ -144,6 +144,7 @@ void ConversionEngine::EncodeVideo(const char* outFileName, bool preview, double
 	outvidcodcontext->height = outHeight;
 	outvidcodcontext->flags |= AV_CODEC_FLAG_INTERLACED_DCT | AV_CODEC_FLAG_INTERLACED_ME; //Interlacing forced on
 	outvidstream->time_base = analogueEnc->bcParams->ratFrametime;
+	outvidstream->start_time = 0;
 	outvidcodcontext->time_base = analogueEnc->bcParams->ratFrametime;
 	outvidcodcontext->gop_size = 12;
 	outvidcodcontext->pix_fmt = AVPixelFormat::AV_PIX_FMT_YUV422P; //just use this so that the output is basically lossless
@@ -165,6 +166,8 @@ void ConversionEngine::EncodeVideo(const char* outFileName, bool preview, double
 		outlayout = AV_CHANNEL_LAYOUT_STEREO;
 		av_channel_layout_copy(&outaudcodcontext->ch_layout, &outlayout);
 		outaudstream->time_base = analogueEnc->bcParams->ratFrametime;
+		outaudstream->start_time = 0;
+		outaudcodcontext->time_base = analogueEnc->bcParams->ratFrametime;
 	}
 
 	//Setup some other parameters
@@ -174,7 +177,7 @@ void ConversionEngine::EncodeVideo(const char* outFileName, bool preview, double
 	outcurFrame->format = AVPixelFormat::AV_PIX_FMT_YUV422P;
 	outcurFrame->width = outWidth;
 	outcurFrame->height = outHeight;
-	outcurFrame->interlaced_frame = true; //Interlacing forced on
+	outcurFrame->flags |= AV_FRAME_FLAG_INTERLACED; //Interlacing forced on
 	av_frame_get_buffer(outcurFrame, 0);
 	avcodec_parameters_from_context(outvidstream->codecpar, outvidcodcontext);
 	if (audstreamIndex != AVERROR_STREAM_NOT_FOUND)
@@ -205,12 +208,24 @@ void ConversionEngine::EncodeVideo(const char* outFileName, bool preview, double
 	av_dict_free(&opt);
 
 	//Initialise loop
+	unsigned char* rData[4];
+	int rLineSize[4];
+	unsigned char* lDataScaled[4];
+	unsigned char* rDataScaled[4];
+	int lLineSizeScaled[4];
+	int rLineSizeScaled[4];
+	av_image_alloc(rData, rLineSize, inWidth, inHeight, inPixFormat, 1);
+	av_image_alloc(lDataScaled, lLineSizeScaled, FIXEDWIDTH, outHeight, AVPixelFormat::AV_PIX_FMT_BGRA, 1);
+	av_image_alloc(rDataScaled, rLineSizeScaled, FIXEDWIDTH, outHeight, AVPixelFormat::AV_PIX_FMT_BGRA, 1);
 	av_seek_frame(infmtcontext, vidstreamIndex, 0, 0);
 	av_read_frame(infmtcontext, incurPacket);
 	avcodec_send_packet(invidcodcontext, incurPacket);
 	avcodec_receive_frame(invidcodcontext, incurFrame);
 	av_image_copy(vidorigData, vidorigLineSize, (const unsigned char**)incurFrame->data, incurFrame->linesize, inPixFormat, inWidth, inHeight);
+	av_image_copy(rData, rLineSize, (const unsigned char**)incurFrame->data, incurFrame->linesize, inPixFormat, inWidth, inHeight);
 	sws_scale(scalercontextForAnalogue, vidorigData, vidorigLineSize, 0, inHeight, vidscaleDataForAnalogue, vidscaleLineSizeForAnalogue);
+	sws_scale(scalercontextForAnalogue, rData, rLineSize, 0, inHeight, rDataScaled, rLineSizeScaled);
+	int field = 0;
 	int interlaceField = 0;
 	int numTransSamp = 0;
 	int totalSamp = 0;
@@ -218,23 +233,50 @@ void ConversionEngine::EncodeVideo(const char* outFileName, bool preview, double
 	SignalPack sig;
 	FrameData finData;
 	double curTime = 0.0;
-	double refTime = 0.0;
+	double lrefTime = 0.0;
+	double rrefTime = 0.0;
 	int totalNumFrames = (int)((((double)(invidstream->duration)) * ((double)invidstream->time_base.num)) / ((double)invidstream->time_base.den * actualFrametime));
 	if (preview && totalNumFrames >= 300) totalNumFrames = 300;
 	std::mt19937_64 rng;
 	std::uniform_real_distribution<> ndist(-noise, noise);
 	char progString[256];
 	char progBar[256];
+	int framesInSecond = (int)(analogueEnc->bcParams->framerate + 0.5);
 	for (int i = 0; i < totalNumFrames; i++)
 	{
 		av_frame_make_writable(outcurFrame);
-		outcurFrame->interlaced_frame = true; //Interlacing forced on
-		sig = analogueEnc->Encode({ (int*)vidscaleDataForAnalogue[0], FIXEDWIDTH, outHeight }, interlaceField);
+		outcurFrame->flags |= AV_FRAME_FLAG_INTERLACED; //Interlacing forced on
+		double dt = rrefTime - lrefTime;
+		if (i != 0)
+		{
+			//Blend the two frames around the actual time point (reduces frame jitter)
+			double mixFac = (curTime - lrefTime)/dt;
+			double lmixFac = 1.0 - mixFac;
+			unsigned char* limg = lDataScaled[0];
+			unsigned char* rimg = rDataScaled[0];
+			unsigned char* oimg = vidscaleDataForAnalogue[0];
+			for (int j = 0; j < FIXEDWIDTH * outHeight * 4; j++)
+			{
+				double lC = (double)limg[j];
+				double rC = (double)rimg[j];
+				double oC = lmixFac * lC + mixFac * rC;
+				oimg[j] = (unsigned char)oC;
+			}
+		}
+		sig = analogueEnc->Encode({ (int*)vidscaleDataForAnalogue[0], FIXEDWIDTH, outHeight }, field);
+		if (tlText != nullptr) sig = analogueEnc->AddText(sig, tlText, 0.15, 16, false);
+		if (timeTextDisplay)
+		{
+			char timer[32];
+			int seconds = i / framesInSecond;
+			sprintf(timer, "%02i:%02i:%02i:%02i", seconds / 3600, (seconds / 60) % 60, seconds % 60, i % framesInSecond);
+			sig = analogueEnc->AddText(sig, timer, 0.15, 32, true);
+		}
 		for (int j = 0; j < sig.len; j++) //Will be replaced with a generic signal transform function soon
 		{
 			sig.signal[j] += ndist(rng);
 		}
-		finData = analogueEnc->Decode(sig, interlaceField, crosstalk);
+		finData = analogueEnc->Decode(sig, field, crosstalk);
 		for (int j = 0; j < analogueEnc->bcParams->videoScanlines / 2; j++) //We only got half a frame out, so we assume interlacing and copy appropriately
 		{
 			memcpy(analogueFrameBuffer + (finData.width * (j * 2 + interlaceField)), finData.image + (finData.width * j), finData.width * 4);
@@ -243,16 +285,20 @@ void ConversionEngine::EncodeVideo(const char* outFileName, bool preview, double
 		memcpy(vidscaleDataForInterlace[0], analogueFrameBuffer, finData.width * outHeight * 4);
 		sws_scale(scalercontextForFinal, vidscaleDataForInterlace, vidscaleLineSizeForInterlace, 0, outHeight, vidscaleDataForFinal, vidscaleLineSizeForFinal);
 		av_image_copy(outcurFrame->data, outcurFrame->linesize, (const unsigned char**)vidscaleDataForFinal, vidscaleLineSizeForFinal, AVPixelFormat::AV_PIX_FMT_YUV422P, outWidth, outHeight);
-		outcurFrame->pts = curFrame++;
+		outcurFrame->pts = curFrame;
 		avcodec_send_frame(outvidcodcontext, outcurFrame);
 		avcodec_receive_packet(outvidcodcontext, outcurPacket);
-		av_packet_rescale_ts(outcurPacket, outvidcodcontext->time_base, outvidstream->time_base);
 		outcurPacket->stream_index = outvidstream->index;
+		//This is not best practice but otherwise the video is out of sync with the audio and that's no good
+		//outcurPacket->pts = curFrame;
+		//outcurPacket->dts = curFrame - 2;
+		av_packet_rescale_ts(outcurPacket, outvidcodcontext->time_base, outvidstream->time_base);
 		av_interleaved_write_frame(outfmtcontext, outcurPacket);
+		curFrame++;
 
 		curTime = actualFrametime * (i + 1);
 
-		while (refTime < curTime)
+		while (rrefTime < curTime)
 		{
 			av_packet_unref(incurPacket);
 			av_read_frame(infmtcontext, incurPacket);
@@ -264,11 +310,13 @@ void ConversionEngine::EncodeVideo(const char* outFileName, bool preview, double
 			{
 				avcodec_send_packet(invidcodcontext, incurPacket);
 				avcodec_receive_frame(invidcodcontext, incurFrame);
-				refTime = (((double)incurPacket->dts) * ((double)invidstream->time_base.num)) / ((double)invidstream->time_base.den);
+				lrefTime = rrefTime;
+				rrefTime = (((double)incurFrame->pts) * ((double)invidstream->time_base.num)) / ((double)invidstream->time_base.den);
 				if (incurFrame->data[0] != NULL)
 				{
-					av_image_copy(vidorigData, vidorigLineSize, (const unsigned char**)incurFrame->data, incurFrame->linesize, inPixFormat, inWidth, inHeight);
-					sws_scale(scalercontextForAnalogue, vidorigData, vidorigLineSize, 0, inHeight, vidscaleDataForAnalogue, vidscaleLineSizeForAnalogue);
+					av_image_copy(lDataScaled, lLineSizeScaled, rDataScaled, rLineSizeScaled, AVPixelFormat::AV_PIX_FMT_BGRA, FIXEDWIDTH, outHeight);
+					av_image_copy(rData, rLineSize, (const unsigned char**)incurFrame->data, incurFrame->linesize, inPixFormat, inWidth, inHeight);
+					sws_scale(scalercontextForAnalogue, rData, rLineSize, 0, inHeight, rDataScaled, rLineSizeScaled);
 				}
 			}
 			else if (audstreamIndex != AVERROR_STREAM_NOT_FOUND && incurPacket->stream_index == audstreamIndex)
@@ -281,16 +329,19 @@ void ConversionEngine::EncodeVideo(const char* outFileName, bool preview, double
 					numTransSamp = av_rescale_rnd(swr_get_delay(resamplercontext, outaudcodcontext->sample_rate) + incurFrame->nb_samples, outaudcodcontext->sample_rate, outaudcodcontext->sample_rate, AV_ROUND_UP);
 					swr_convert(resamplercontext, outaudFrame->data, numTransSamp, (const unsigned char**)incurFrame->data, incurFrame->nb_samples);
 					outaudFrame->pts = av_rescale_q(totalSamp, { 1, outaudcodcontext->sample_rate }, outaudcodcontext->time_base);
-					totalSamp += numTransSamp;
 					avcodec_send_frame(outaudcodcontext, outaudFrame);
 					avcodec_receive_packet(outaudcodcontext, outaudPacket);
-					av_packet_rescale_ts(outaudPacket, outaudcodcontext->time_base, outaudstream->time_base);
 					outaudPacket->stream_index = outaudstream->index;
+					outaudPacket->pts = av_rescale_q(totalSamp, { 1, outaudcodcontext->sample_rate }, outaudcodcontext->time_base);
+					outaudPacket->dts = av_rescale_q(totalSamp, { 1, outaudcodcontext->sample_rate }, outaudcodcontext->time_base);
+					av_packet_rescale_ts(outaudPacket, outaudcodcontext->time_base, outaudstream->time_base);
 					av_interleaved_write_frame(outfmtcontext, outaudPacket);
+					totalSamp += numTransSamp;
 				}
 			}
 		}
-		interlaceField = interlaceField ? 0 : 1;
+		field++;
+		interlaceField = field & 1;
 		delete[] sig.signal;
 		delete[] finData.image;
 		sprintf(progString, "Wrote frame %u/%u ", i + 1, totalNumFrames);

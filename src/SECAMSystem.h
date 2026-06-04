@@ -1,6 +1,6 @@
 /*
 * VideoAnalogiser - Command Line Utility for Analogising Digital Videos
-* Maxim Hoxha 2023
+* Maxim Hoxha 2023-2026
 * SECAM encoder/decoder
 * This software uses code of FFmpeg (http://ffmpeg.org) licensed under the LGPLv2.1 (http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html)
 */
@@ -25,8 +25,9 @@ class SECAMSystem : public ColourSystem
 public:
     SECAMSystem(BroadcastSystems sys, bool interlace, double resonance, double prefilterMult, double phaseNoise, double scanlineJitter, double noiseExponent);
 
-    virtual SignalPack Encode(FrameData imgdat, int interlaceField) override;
-    virtual FrameData Decode(SignalPack signal, int interlaceField, double crosstalk) override;
+    virtual SignalPack Encode(FrameData imgdat, int field) override;
+    virtual FrameData Decode(SignalPack signal, int field, double crosstalk) override;
+    virtual SignalPack AddText(SignalPack signal, const char* text, double x, int y, bool yRelativeToBottom) override;
 private:
     MultiOctaveNoiseGen* jitGen;
     MultiOctaveNoiseGen* phNoiseGen;

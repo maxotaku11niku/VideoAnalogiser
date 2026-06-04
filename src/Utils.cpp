@@ -1,6 +1,6 @@
 /*
 * VideoAnalogiser - Command Line Utility for Analogising Digital Videos
-* Maxim Hoxha 2023
+* Maxim Hoxha 2023-2026
 * Mathematical utitlies, mostly relating to filters
 * This software uses code of FFmpeg (http://ffmpeg.org) licensed under the LGPLv2.1 (http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html)
 */
@@ -23,7 +23,7 @@ static inline double StandardFilter(double f, double attenuation)
 FIRFilter MakeFIRFilter(double sampleRate, int size, double center, double width, double attenuation)
 {
     int backport = 5;
-    float* outfir = new float[size + backport];
+    double* outfir = new double[size + backport];
     double integral = 0.0;
     double integpoint = 0.0;
     double freqpointbef = 0.0;
@@ -99,8 +99,22 @@ FIRFilter MakeFIRFilter(double sampleRate, int size, double center, double width
         }
     }
 
+    //Normalise the filter to avoid brightness changes
+    /**/
+    double sum = 0.0;
+    for (int i = backport - truebackport; i < truesize + backport - truebackport; i++)
+    {
+        sum += outfir[i];
+    }
+    sum *= 1.07; //somehow still too bright otherwise, a very naughty fudge factor indeed
+    for (int i = backport - truebackport; i < truesize + backport - truebackport; i++)
+    {
+        outfir[i] /= sum;
+    }
+    //*/
+
     float* realOutFir = new float[truesize];
-    float* fromptr = &outfir[backport - truebackport];
+    double* fromptr = &outfir[backport - truebackport];
     float* toptr = realOutFir + truesize - 1;
     //Reorder the filter here to aid in vectorising the inner loops of ApplyFIRFilter()
     for (int i = 0; i < truesize; i++)

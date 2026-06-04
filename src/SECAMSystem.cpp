@@ -1,12 +1,13 @@
 /*
 * VideoAnalogiser - Command Line Utility for Analogising Digital Videos
-* Maxim Hoxha 2023
+* Maxim Hoxha 2023-2026
 * SECAM encoder/decoder
 * This software uses code of FFmpeg (http://ffmpeg.org) licensed under the LGPLv2.1 (http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html)
 */
 
 #include <iostream>
 #include "SECAMSystem.h"
+#include "VHSFont.h"
 
 SECAMSystem::SECAMSystem(BroadcastSystems sys, bool interlace, double resonance, double prefilterMult, double phaseNoise, double scanlineJitter, double noiseExponent)
 {
@@ -88,7 +89,7 @@ SECAMSystem::SECAMSystem(BroadcastSystems sys, bool interlace, double resonance,
     phNoiseGen = new MultiOctaveNoiseGen(11, 0.0, phaseNoise, noiseExponent);
 }
 
-SignalPack SECAMSystem::Encode(FrameData imgdat, int interlaceField)
+SignalPack SECAMSystem::Encode(FrameData imgdat, int field)
 {
     double realActiveTime = bcParams->activeTime;
     double realScanlineTime = 1.0 / (double)(fieldScanlines * bcParams->framerate);
@@ -101,7 +102,6 @@ SignalPack SECAMSystem::Encode(FrameData imgdat, int interlaceField)
     double Dr = 0.0;
     double time = 0;
     int pos = 0;
-    int polarity = 0;
     int remainingSync = 0;
     double sampleTime = realActiveTime / (double)imgdat.width;
 
@@ -123,6 +123,7 @@ SignalPack SECAMSystem::Encode(FrameData imgdat, int interlaceField)
     double finSamp = 0.0;
     int w = imgdat.width;
     int col;
+    int interlaceField = field & 1;
     int subcarrierstartind = (int)((SUBCARRIER_START_TIME / realActiveTime) * ((double)imgdat.width));
     SignalPack Ysig = { new float[signalLen], signalLen };
     SignalPack Dbsig = { new float[signalLen], signalLen };
@@ -130,7 +131,7 @@ SignalPack SECAMSystem::Encode(FrameData imgdat, int interlaceField)
     //Make component signals
     for (int i = 0; i < fieldScanlines; i++) //Only generate active scanlines
     {
-        currentScanline = interlaced ? (i * 2 + polarity) % bcParams->videoScanlines : i;
+        currentScanline = interlaced ? (i * 2 + interlaceField) % bcParams->videoScanlines : i;
         for (int j = 0; j < activeSignalStarts[i]; j++) //Front porch, ignore sync signal because we don't see its results
         {
             Ysig.signal[pos] = 0.0f;
@@ -210,7 +211,7 @@ SignalPack SECAMSystem::Encode(FrameData imgdat, int interlaceField)
     return { signalOut, signalLen };
 }
 
-FrameData SECAMSystem::Decode(SignalPack signal, int interlaceField, double crosstalk)
+FrameData SECAMSystem::Decode(SignalPack signal, int field, double crosstalk)
 {
     double realActiveTime = bcParams->activeTime;
     double realScanlineTime = 1.0 / (double)(fieldScanlines * bcParams->framerate);
@@ -416,4 +417,58 @@ FrameData SECAMSystem::Decode(SignalPack signal, int interlaceField, double cros
     delete[] finalDrSignal.signal;
 
     return writeToSurface;
+}
+
+//I know this is wrong! (TODO)
+SignalPack SECAMSystem::AddText(SignalPack signal, const char* text, double x, int y, bool yRelativeToBottom)
+{
+	unsigned char curCh = *text++;
+	int chCount = 0;
+	int startY = y;
+	if (yRelativeToBottom) startY = fieldScanlines - y;
+	int finalScanline = startY + 14;
+	if (finalScanline > fieldScanlines) finalScanline = fieldScanlines;
+	int actualStartY = startY;
+	if (actualStartY < 0) actualStartY = 0;
+	double realActiveTime = bcParams->activeTime;
+	double realScanlineTime = 1.0 / (double)(fieldScanlines * bcParams->framerate);
+	double scanlineLength = FIXEDWIDTH * (realScanlineTime/realActiveTime);
+	double scanlineIncPerSample = 1.0 / (scanlineLength * VHS_FONT_GLYPH_WIDTH);
+	float* sig = signal.signal;
+	while (curCh != 0)
+	{
+		if (curCh < 0x80)
+		{
+			const unsigned short* glyph = asciiPtrs[curCh];
+			for (int i = actualStartY; i < finalScanline; i++)
+			{
+				int sigStart = (int)((scanlineLength * x) + (chCount * (12.0/scanlineIncPerSample)) + (((double)i * (double)signal.len) / ((double)fieldScanlines)));
+				double sampleCounter = 0.0;
+				unsigned short glyphPart = glyph[i - startY];
+				while (sampleCounter < 12.0)
+				{
+					int glyphInd0 = (int)sampleCounter;
+					int glyphInd1 = glyphInd0 + 1;
+					float samplePart = (float)(sampleCounter - (double)glyphInd0);
+					float mSamplePart = 1.0f - samplePart;
+					unsigned short glyphPart0 = glyphPart >> (15 - glyphInd0);
+					glyphPart0 &= 0x01;
+					unsigned short glyphPart1 = glyphPart >> (15 - glyphInd1);
+					glyphPart1 &= 0x01;
+					float inSig = sig[sigStart];
+					float inSig0 = inSig;
+					float inSig1 = inSig;
+					if (glyphPart0) inSig0 = 1.0f;
+					if (glyphPart1) inSig1 = 1.0f;
+					sig[sigStart] = mSamplePart * inSig0 + samplePart * inSig1;
+					sigStart++;
+					sampleCounter += scanlineIncPerSample;
+				}
+			}
+			chCount++;
+		}
+		curCh = *text++;
+	}
+
+	return signal;
 }

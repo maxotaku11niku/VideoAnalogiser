@@ -56,6 +56,14 @@ Simulates noise in the phase of the subcarrier decoder, over each scanline. Uppi
 
 Affects how much the chroma and luma information mix. Upping this value will strengthen the dot patterns on the screen and cause colours to shift. Recommended values 0.0 - 1.0. Defaults to 0.0.
 
-## `-pfnoise [amount]`
+## `-noiseexp [amount]`
 
-Simulates noise in the phase of the subcarrier decoder, over each field. Upping this value will cause flashing colours to appear. This won't affect the colours of SECAM, and its effect will be more subtle in PAL. Recommended values 0.0 - 3.0. Defaults to 0.0.
+Affects the noise spectrum exponent of jitter and scanline noise, which goes as f^-amount. Recommended values 0.0 - 1.0. Defaults to 0.5.
+
+## `-text [text]`
+
+Puts the following text in the top left of the video, using the stereotypical VHS recorder font.
+
+## `-timetext`
+
+Puts the time stamp of the current frame (HH:MM:SS:FF) in the bottom left of the video, using the stereotypical VHS recorder font.

@@ -1,12 +1,13 @@
 /*
 * VideoAnalogiser - Command Line Utility for Analogising Digital Videos
-* Maxim Hoxha 2023
+* Maxim Hoxha 2023-2026
 * PAL encoder/decoder
 * This software uses code of FFmpeg (http://ffmpeg.org) licensed under the LGPLv2.1 (http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html)
 */
 
 #include <iostream>
 #include "PALSystem.h"
+#include "VHSFont.h"
 
 PALSystem::PALSystem(BroadcastSystems sys, bool interlace, double resonance, double prefilterMult, double phaseNoise, double scanlineJitter, double noiseExponent)
 {
@@ -80,7 +81,7 @@ PALSystem::PALSystem(BroadcastSystems sys, bool interlace, double resonance, dou
 	phNoiseGen = new MultiOctaveNoiseGen(11, 0.0, phaseNoise, noiseExponent);
 }
 
-SignalPack PALSystem::Encode(FrameData imgdat, int interlaceField)
+SignalPack PALSystem::Encode(FrameData imgdat, int field)
 {
 	double realActiveTime = bcParams->activeTime;
 	double realScanlineTime = 1.0 / (double)(fieldScanlines * bcParams->framerate);
@@ -115,6 +116,7 @@ SignalPack PALSystem::Encode(FrameData imgdat, int interlaceField)
 	double finSamp = 0.0;
 	int w = imgdat.width;
 	int col;
+	int interlaceField = field & 1;
 	double carrierAngFreq = bcParams->carrierAngFreq;
 	SignalPack Ysig = { new float[signalLen], signalLen };
 	SignalPack Usig = { new float[signalLen], signalLen };
@@ -161,17 +163,19 @@ SignalPack PALSystem::Encode(FrameData imgdat, int interlaceField)
 	SignalPack filtUsig = ApplyFIRFilter(Usig, chromaprefir);
 	SignalPack filtVsig = ApplyFIRFilter(Vsig, chromaprefir);
 	pos = 0;
+	double frameAlternation = field & 2 ? -1.0 : 1.0;
+	double phaseAdv = fmod(field * bcParams->carrierAngFreq * bcParams->scanlineTime * 2.0, 2.0 * M_PI);
 	//Composite component signals
 	for (int i = 0; i < fieldScanlines; i++)
 	{
 		if ((i % 2) == 1) //Do phase alternation
 		{
-			phaseAlternate = -1.0;
+			phaseAlternate = -1.0 * frameAlternation;
 		}
-		else phaseAlternate = 1.0;
+		else phaseAlternate = frameAlternation;
 		while (pos < boundaryPoints[i + 1])
 		{
-			signalOut[pos] = filtYsig.signal[pos] + filtUsig.signal[pos] * sin(carrierAngFreq * time) + phaseAlternate * filtVsig.signal[pos] * cos(carrierAngFreq * time); //Add chroma via QAM
+			signalOut[pos] = filtYsig.signal[pos] + filtUsig.signal[pos] * sin(carrierAngFreq * time + phaseAdv) + phaseAlternate * filtVsig.signal[pos] * cos(carrierAngFreq * time + phaseAdv); //Add chroma via QAM
 			pos++;
 			time = pos * sampleTime;
 		}
@@ -187,7 +191,7 @@ SignalPack PALSystem::Encode(FrameData imgdat, int interlaceField)
     return { signalOut, signalLen };
 }
 
-FrameData PALSystem::Decode(SignalPack signal, int interlaceField, double crosstalk)
+FrameData PALSystem::Decode(SignalPack signal, int field, double crosstalk)
 {
     double realActiveTime = bcParams->activeTime;
     double realScanlineTime = 1.0 / (double)(fieldScanlines * bcParams->framerate);
@@ -198,7 +202,6 @@ FrameData PALSystem::Decode(SignalPack signal, int interlaceField, double crosst
     double Y = 0.0;
     double U = 0.0;
     double V = 0.0;
-    int polarity = 0;
     int pos = 0;
     int posdel = 0;
     double sigNum = 0.0;
@@ -211,15 +214,17 @@ FrameData PALSystem::Decode(SignalPack signal, int interlaceField, double crosst
 	//Extract QAM colour signals
     double time = 0.0;
     double carrierAngFreq = bcParams->carrierAngFreq;
+	double phaseAdv = fmod(field * bcParams->carrierAngFreq * bcParams->scanlineTime * 2.0, 2.0 * M_PI);
 	double phOffs = 0.0;
+	double frameAlternation = field & 2 ? -1.0 : 1.0;
 	for (int i = 0; i < fieldScanlines; i++)
 	{
 		phOffs = phNoiseGen->GenNoise();
 		while (pos < boundaryPoints[i + 1])
 		{
 			time = pos * sampleTime;
-			USignalPreAlt[pos] = colsignal.signal[pos] * sin(carrierAngFreq * time + phOffs) * 2.0;
-			VSignalPreAlt[pos] = colsignal.signal[pos] * cos(carrierAngFreq * time + phOffs) * 2.0;
+			USignalPreAlt[pos] = colsignal.signal[pos] * sin(carrierAngFreq * time + phOffs + phaseAdv) * 2.0;
+			VSignalPreAlt[pos] = frameAlternation * colsignal.signal[pos] * cos(carrierAngFreq * time + phOffs + phaseAdv) * 2.0;
 			pos++;
 		}
 	}
@@ -299,4 +304,57 @@ FrameData PALSystem::Decode(SignalPack signal, int interlaceField, double crosst
 	delete[] finalVSignal.signal;
 
     return writeToSurface;
+}
+
+SignalPack PALSystem::AddText(SignalPack signal, const char* text, double x, int y, bool yRelativeToBottom)
+{
+	unsigned char curCh = *text++;
+	int chCount = 0;
+	int startY = y;
+	if (yRelativeToBottom) startY = fieldScanlines - y;
+	int finalScanline = startY + 14;
+	if (finalScanline > fieldScanlines) finalScanline = fieldScanlines;
+	int actualStartY = startY;
+	if (actualStartY < 0) actualStartY = 0;
+	double realActiveTime = bcParams->activeTime;
+	double realScanlineTime = 1.0 / (double)(fieldScanlines * bcParams->framerate);
+	double scanlineLength = FIXEDWIDTH * (realScanlineTime/realActiveTime);
+	double scanlineIncPerSample = 1.0 / (scanlineLength * VHS_FONT_GLYPH_WIDTH);
+	float* sig = signal.signal;
+	while (curCh != 0)
+	{
+		if (curCh < 0x80)
+		{
+			const unsigned short* glyph = asciiPtrs[curCh];
+			for (int i = actualStartY; i < finalScanline; i++)
+			{
+				int sigStart = (int)((scanlineLength * x) + (chCount * (12.0/scanlineIncPerSample)) + (((double)i * (double)signal.len) / ((double)fieldScanlines)));
+				double sampleCounter = 0.0;
+				unsigned short glyphPart = glyph[i - startY];
+				while (sampleCounter < 12.0)
+				{
+					int glyphInd0 = (int)sampleCounter;
+					int glyphInd1 = glyphInd0 + 1;
+					float samplePart = (float)(sampleCounter - (double)glyphInd0);
+					float mSamplePart = 1.0f - samplePart;
+					unsigned short glyphPart0 = glyphPart >> (15 - glyphInd0);
+					glyphPart0 &= 0x01;
+					unsigned short glyphPart1 = glyphPart >> (15 - glyphInd1);
+					glyphPart1 &= 0x01;
+					float inSig = sig[sigStart];
+					float inSig0 = inSig;
+					float inSig1 = inSig;
+					if (glyphPart0) inSig0 = 1.0f;
+					if (glyphPart1) inSig1 = 1.0f;
+					sig[sigStart] = mSamplePart * inSig0 + samplePart * inSig1;
+					sigStart++;
+					sampleCounter += scanlineIncPerSample;
+				}
+			}
+			chCount++;
+		}
+		curCh = *text++;
+	}
+
+	return signal;
 }

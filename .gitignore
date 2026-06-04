@@ -4,3 +4,4 @@ out/
 bin/
 obj/
 genasm/
+releases/

@@ -16,27 +16,64 @@ export OFILESC      := $(CFILES:.c=.o)
 export OFILESCPP    := $(CPPFILES:.cpp=.o)
 export OFILES       := $(OFILESC) $(OFILESCPP)
 export FULLOFILES   := $(addprefix $(BUILD)/,$(OFILES))
+
+# Hacky overrides for my own use, they don't interfere with 'sane' building
+ifdef MHB_SYSTEM_INCLUDE
+MHB_SYSTEM_INCLUDE := $(addprefix -isystem, $(MHB_SYSTEM_INCLUDE))
+endif
+
+ifdef MHB_SYSTEM_LIBS
+MHB_SYSTEM_LIBS := $(addprefix -L, $(MHB_SYSTEM_LIBS))
+endif
+
 # Flags and libraries
-export CFLAGSBASE       := -fopenmp
+export CFLAGSBASE       := -fopenmp $(MHB_SYSTEM_INCLUDE)
 export CFLAGSDEBUG      := $(CFLAGSBASE) -Og
 # Has all sorts of dangerous floating point assumptions for the sake of SPEED!
-export CFLAGSRELEASE    := $(CFLAGSBASE) -Ofast -flto -fno-trapping-math -fno-math-errno -ffast-math -ffp-contract=fast -ffinite-math-only -fno-signed-zeros -freciprocal-math
+export CFLAGSRELEASE    := $(CFLAGSBASE) -Ofast -flto=auto -fno-trapping-math -fno-math-errno -ffast-math -ffp-contract=fast -ffinite-math-only -fno-signed-zeros -freciprocal-math
 export CFLAGS           := $(CFLAGSBASE)
 export CXXFLAGS         :=
-export LINKFLAGSBASE    :=
+export LINKFLAGSBASE    := $(MHB_SYSTEM_LIBS)
 export LINKFLAGSDEBUG   := $(LINKFLAGSBASE)
 export LINKFLAGSRELEASE := $(LINKFLAGSBASE) -Wl,-s
 export LINKFLAGS        := $(LINKFLAGSBASE)
-export LINKLIBS         := -lavcodec -lavformat -lavutil -lswscale -lswresample
+export LINKLIBSBASE     :=
+export LINKLIBS         := $(LINKLIBSBASE) -lavutil -lavcodec -lavformat -lswscale -lswresample
 
 # Define some variable overrides
 default : CFLAGS = $(CFLAGSRELEASE)
+build-linux32 : CFLAGS = $(CFLAGSRELEASE)
+build-linux64 : CFLAGS = $(CFLAGSRELEASE)
+build-win32 : CFLAGS = $(CFLAGSRELEASE)
+build-win64 : CFLAGS = $(CFLAGSRELEASE)
 native : CFLAGS = $(CFLAGSRELEASE) -march=native
 debug : CFLAGS = $(CFLAGSDEBUG)
 
+default : LINKLIBS = $(LINKLIBSBASE) -lavutil -lavcodec -lavformat -lswscale -lswresample
+build-linux32 : LINKLIBS = $(LINKLIBSBASE) -lavutil -lavcodec -lavformat -lswscale -lswresample
+build-linux64 : LINKLIBS = $(LINKLIBSBASE) -lavutil -lavcodec -lavformat -lswscale -lswresample
+build-win32 : LINKLIBS = $(LINKLIBSBASE) -lavutil -lavcodec -lavformat -lswscale -lswresample
+build-win64 : LINKLIBS = $(LINKLIBSBASE) -lavutil -lavcodec -lavformat -lswscale -lswresample
+native : LINKLIBS = $(LINKLIBSBASE) -lavutil -lavcodec -lavformat -lswscale -lswresample
+debug : LINKLIBS = $(LINKLIBSBASE) -lavutil -lavcodec -lavformat -lswscale -lswresample
+
 default : LINKFLAGS = $(LINKFLAGSRELEASE)
+build-linux32 : LINKFLAGS = $(LINKFLAGSRELEASE)
+build-linux64 : LINKFLAGS = $(LINKFLAGSRELEASE)
+build-win32 : LINKFLAGS = $(LINKFLAGSRELEASE)
+build-win64 : LINKFLAGS = $(LINKFLAGSRELEASE)
 native : LINKFLAGS = $(LINKFLAGSRELEASE)
 debug : LINKFLAGS = $(LINKFLAGSDEBUG)
+
+build-linux32 : CC = i686-linux-gnu-gcc
+build-linux64 : CC = x86_64-linux-gnu-gcc
+build-win32 : CC = i686-w64-mingw32-gcc
+build-win64 : CC = x86_64-w64-mingw32-gcc
+
+build-linux32 : CXX = i686-linux-gnu-g++
+build-linux64 : CXX = x86_64-linux-gnu-g++
+build-win32 : CXX = i686-w64-mingw32-g++
+build-win64 : CXX = x86_64-w64-mingw32-g++
 
 .PHONY : default native debug showasm clean cleanasm install-linux
 
@@ -44,6 +81,18 @@ all : default
 
 #Builds for the current host OS, but assumes a basic variant of the current processor architecture
 default : $(BUILD) $(TARGET) $(TARGET)/$(EXE)
+
+#Builds for Linux on x86-32
+build-linux32 : $(BUILD) $(TARGET) $(TARGET)/$(EXE)
+
+#Builds for Linux on x86-64
+build-linux64 : $(BUILD) $(TARGET) $(TARGET)/$(EXE)
+
+#Builds for Windows on x86-32
+build-win32 : $(BUILD) $(TARGET) $(TARGET)/$(EXE)
+
+#Builds for Windows on x86-64
+build-win64 : $(BUILD) $(TARGET) $(TARGET)/$(EXE)
 
 #Builds specifically for this machine
 native : $(BUILD) $(TARGET) $(TARGET)/$(EXE)
@@ -79,18 +128,18 @@ $(GENASM) :
 	mkdir -p $(GENASM)
 
 $(TARGET)/$(EXE) : $(FULLOFILES)
-	g++ $(CFLAGS) $(CXXFLAGS) $(LINKFLAGS) -o $@ $^ $(LINKLIBS)
+	$(CXX) $(CFLAGS) $(CXXFLAGS) $(LINKFLAGS) -o $@ $^ $(LINKLIBS)
 
-$(FULLOFILES) : $(FULLCFILES) $(FULLCPPFILES) $(FULLHEADERS)
+$(FULLOFILES) : $(FULLHEADERS)
 
 $(BUILD)/%.o : $(SOURCES)/%.c
-	gcc -c $(CFLAGS) -o $@ $<
+	$(CC) -c $(CFLAGS) -o $@ $<
 
 $(BUILD)/%.o : $(SOURCES)/%.cpp
-	g++ -c $(CFLAGS) $(CXXFLAGS) -o $@ $<
+	$(CXX) -c $(CFLAGS) $(CXXFLAGS) -o $@ $<
 
 $(GENASM)/%.asm	: $(SOURCES)/%.c
-	gcc -c -O3 -S -o $@ $<
+	$(CC) -c -O3 -S -o $@ $<
 
 $(GENASM)/%.asm	: $(SOURCES)/%.cpp
-	g++ -c -O3 $(CXXFLAGS) -S -o $@ $<
+	$(CXX) -c -O3 $(CXXFLAGS) -S -o $@ $<

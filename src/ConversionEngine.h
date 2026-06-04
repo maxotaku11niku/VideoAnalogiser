@@ -1,6 +1,6 @@
 /*
 * VideoAnalogiser - Command Line Utility for Analogising Digital Videos
-* Maxim Hoxha 2023
+* Maxim Hoxha 2023-2026
 * Main conversion code
 * This software uses code of FFmpeg (http://ffmpeg.org) licensed under the LGPLv2.1 (http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html)
 */
@@ -24,7 +24,7 @@ public:
 	ConversionEngine(BroadcastSystems bSys, ColourSystems cSys, double resonance, double prefilterMult, double phaseNoise, double scanlineJitter, double noiseExponent);
 
 	void OpenForDecodeVideo(const char* inFileName);
-    void EncodeVideo(const char* outFileName, bool preview, double kbps, double noise, double crosstalk);
+    void EncodeVideo(const char* outFileName, bool preview, double kbps, double noise, double crosstalk, const char* tlText, bool timeTextDisplay);
 	void CloseDecoder();
 private:
     void GenerateTextProgressBar(double progress, int fullLength, char* progBarChars);

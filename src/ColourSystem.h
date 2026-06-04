@@ -1,6 +1,6 @@
 /*
 * VideoAnalogiser - Command Line Utility for Analogising Digital Videos
-* Maxim Hoxha 2023
+* Maxim Hoxha 2023-2026
 * Colour system abstract class
 * This software uses code of FFmpeg (http://ffmpeg.org) licensed under the LGPLv2.1 (http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html)
 */
@@ -11,7 +11,7 @@
 #include "Utils.h"
 
 #define PREFILTER_RESONANCE 2.0
-#define FIXEDWIDTH 860
+#define FIXEDWIDTH 1152
 
 typedef struct
 {
@@ -37,8 +37,9 @@ public:
 
 	const BroadcastStandard* bcParams;
 
-	virtual SignalPack Encode(FrameData imgdat, int interlaceField) = 0;
-	virtual FrameData Decode(SignalPack signal, int interlaceField, double crosstalk) = 0;
+	virtual SignalPack Encode(FrameData imgdat, int field) = 0;
+	virtual FrameData Decode(SignalPack signal, int field, double crosstalk) = 0;
+	virtual SignalPack AddText(SignalPack signal, const char* text, double x, int y, bool yRelativeToBottom) = 0;
 
 protected:
 	const double* RGBtoYCCConversionMatrix;
