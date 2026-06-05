@@ -24,7 +24,7 @@ public:
 	ConversionEngine(BroadcastSystems bSys, ColourSystems cSys, double resonance, double prefilterMult, double phaseNoise, double scanlineJitter, double noiseExponent);
 
 	void OpenForDecodeVideo(const char* inFileName);
-    void EncodeVideo(const char* outFileName, bool preview, double kbps, double noise, double crosstalk, const char* tlText, bool timeTextDisplay);
+    void EncodeVideo(const char* outFileName, bool preview, double noise, double crosstalk, const char* tlText, bool timeTextDisplay);
 	void CloseDecoder();
 private:
     void GenerateTextProgressBar(double progress, int fullLength, char* progBarChars);

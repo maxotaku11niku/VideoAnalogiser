@@ -122,7 +122,7 @@ void ConversionEngine::GenerateTextProgressBar(double progress, int fullLength, 
 	}
 }
 
-void ConversionEngine::EncodeVideo(const char* outFileName, bool preview, double kbps, double noise, double crosstalk, const char* tlText, bool timeTextDisplay)
+void ConversionEngine::EncodeVideo(const char* outFileName, bool preview, double noise, double crosstalk, const char* tlText, bool timeTextDisplay)
 {
 	//Zero out the buffer just in case
 	for (int i = 0; i < FIXEDWIDTH * outHeight; i++)
@@ -130,16 +130,18 @@ void ConversionEngine::EncodeVideo(const char* outFileName, bool preview, double
 		analogueFrameBuffer[i] = 0xFF000000;
 	}
 
+	//Both of these streams are made to be essentially lossless and use fixed codecs to reduce testing burden. Transcoding from the output to other formats is left to other programs.
+
 	//Setup output video stream
 	avformat_alloc_output_context2(&outfmtcontext, NULL, NULL, outFileName);
 	const AVOutputFormat* ofmt = outfmtcontext->oformat;
-	const AVCodec* ocod = avcodec_find_encoder(ofmt->video_codec);
+	const AVCodec* ocod = avcodec_find_encoder(AV_CODEC_ID_H264);
 	outcurPacket = av_packet_alloc();
 	outvidstream = avformat_new_stream(outfmtcontext, NULL);
 	outvidstream->id = outfmtcontext->nb_streams - 1;
 	outvidcodcontext = avcodec_alloc_context3(ocod);
-	outvidcodcontext->codec_id = ofmt->video_codec;
-	outvidcodcontext->bit_rate = (int64_t)(kbps * 1024.0);
+	outvidcodcontext->codec_id = AV_CODEC_ID_H264;
+	outvidcodcontext->qmax = 0;
 	outvidcodcontext->width = outWidth;
 	outvidcodcontext->height = outHeight;
 	outvidcodcontext->flags |= AV_CODEC_FLAG_INTERLACED_DCT | AV_CODEC_FLAG_INTERLACED_ME; //Interlacing forced on
@@ -154,20 +156,20 @@ void ConversionEngine::EncodeVideo(const char* outFileName, bool preview, double
 	const AVCodec* acod;
 	if (audstreamIndex != AVERROR_STREAM_NOT_FOUND)
 	{
-		acod = avcodec_find_encoder(ofmt->audio_codec);
+		acod = avcodec_find_encoder(AV_CODEC_ID_VORBIS);
 		outaudPacket = av_packet_alloc();
 		outaudstream = avformat_new_stream(outfmtcontext, NULL);
 		outaudstream->id = outfmtcontext->nb_streams - 1;
 		outaudcodcontext = avcodec_alloc_context3(acod);
-		outaudcodcontext->codec_id = ofmt->audio_codec;
-		outaudcodcontext->bit_rate = 256000;
+		outaudcodcontext->codec_id = AV_CODEC_ID_VORBIS;
+		outaudcodcontext->bit_rate = 320000;
 		outaudcodcontext->sample_rate = inAudioRate;
 		outaudcodcontext->sample_fmt = AVSampleFormat::AV_SAMPLE_FMT_FLTP;
 		outlayout = AV_CHANNEL_LAYOUT_STEREO;
 		av_channel_layout_copy(&outaudcodcontext->ch_layout, &outlayout);
-		outaudstream->time_base = analogueEnc->bcParams->ratFrametime;
+		outaudstream->time_base = { 1, inAudioRate };
 		outaudstream->start_time = 0;
-		outaudcodcontext->time_base = analogueEnc->bcParams->ratFrametime;
+		outaudcodcontext->time_base = { 1, inAudioRate };
 	}
 
 	//Setup some other parameters
@@ -214,34 +216,75 @@ void ConversionEngine::EncodeVideo(const char* outFileName, bool preview, double
 	unsigned char* rDataScaled[4];
 	int lLineSizeScaled[4];
 	int rLineSizeScaled[4];
-	av_image_alloc(rData, rLineSize, inWidth, inHeight, inPixFormat, 1);
-	av_image_alloc(lDataScaled, lLineSizeScaled, FIXEDWIDTH, outHeight, AVPixelFormat::AV_PIX_FMT_BGRA, 1);
-	av_image_alloc(rDataScaled, rLineSizeScaled, FIXEDWIDTH, outHeight, AVPixelFormat::AV_PIX_FMT_BGRA, 1);
-	av_seek_frame(infmtcontext, vidstreamIndex, 0, 0);
-	av_read_frame(infmtcontext, incurPacket);
-	avcodec_send_packet(invidcodcontext, incurPacket);
-	avcodec_receive_frame(invidcodcontext, incurFrame);
-	av_image_copy(vidorigData, vidorigLineSize, (const unsigned char**)incurFrame->data, incurFrame->linesize, inPixFormat, inWidth, inHeight);
-	av_image_copy(rData, rLineSize, (const unsigned char**)incurFrame->data, incurFrame->linesize, inPixFormat, inWidth, inHeight);
-	sws_scale(scalercontextForAnalogue, vidorigData, vidorigLineSize, 0, inHeight, vidscaleDataForAnalogue, vidscaleLineSizeForAnalogue);
-	sws_scale(scalercontextForAnalogue, rData, rLineSize, 0, inHeight, rDataScaled, rLineSizeScaled);
 	int field = 0;
 	int interlaceField = 0;
 	int numTransSamp = 0;
 	int totalSamp = 0;
+	int totalSampAdv = 0;
 	int64_t curFrame = 0;
 	SignalPack sig;
 	FrameData finData;
 	double curTime = 0.0;
 	double lrefTime = 0.0;
 	double rrefTime = 0.0;
+	av_image_alloc(rData, rLineSize, inWidth, inHeight, inPixFormat, 1);
+	av_image_alloc(lDataScaled, lLineSizeScaled, FIXEDWIDTH, outHeight, AVPixelFormat::AV_PIX_FMT_BGRA, 1);
+	av_image_alloc(rDataScaled, rLineSizeScaled, FIXEDWIDTH, outHeight, AVPixelFormat::AV_PIX_FMT_BGRA, 1);
+	av_seek_frame(infmtcontext, vidstreamIndex, 0, 0);
+	if (audstreamIndex != AVERROR_STREAM_NOT_FOUND) av_seek_frame(infmtcontext, audstreamIndex, 0, 0);
+	av_read_frame(infmtcontext, incurPacket);
+	if (incurPacket->stream_index == vidstreamIndex)
+	{
+		avcodec_send_packet(invidcodcontext, incurPacket);
+		avcodec_receive_frame(invidcodcontext, incurFrame);
+		lrefTime = rrefTime;
+		rrefTime = (((double)incurFrame->pts) * ((double)invidstream->time_base.num)) / ((double)invidstream->time_base.den);
+		if (incurFrame->data[0] != NULL)
+		{
+			av_image_copy(vidorigData, vidorigLineSize, (const unsigned char**)incurFrame->data, incurFrame->linesize, inPixFormat, inWidth, inHeight);
+			av_image_copy(rData, rLineSize, (const unsigned char**)incurFrame->data, incurFrame->linesize, inPixFormat, inWidth, inHeight);
+			sws_scale(scalercontextForAnalogue, vidorigData, vidorigLineSize, 0, inHeight, vidscaleDataForAnalogue, vidscaleLineSizeForAnalogue);
+			sws_scale(scalercontextForAnalogue, rData, rLineSize, 0, inHeight, rDataScaled, rLineSizeScaled);
+		}
+	}
+	else if (audstreamIndex != AVERROR_STREAM_NOT_FOUND && incurPacket->stream_index == audstreamIndex)
+	{
+		avcodec_send_packet(inaudcodcontext, incurPacket);
+		avcodec_receive_frame(inaudcodcontext, incurFrame);
+		if (incurFrame->data[0] != NULL)
+		{
+			av_frame_make_writable(outaudFrame);
+			numTransSamp = av_rescale_rnd(swr_get_delay(resamplercontext, outaudcodcontext->sample_rate) + incurFrame->nb_samples, outaudcodcontext->sample_rate, outaudcodcontext->sample_rate, AV_ROUND_UP);
+			swr_convert(resamplercontext, outaudFrame->data, numTransSamp, (const unsigned char**)incurFrame->data, incurFrame->nb_samples);
+			outaudFrame->pts = av_rescale_q(totalSampAdv, { 1, outaudcodcontext->sample_rate }, outaudcodcontext->time_base);
+			avcodec_send_frame(outaudcodcontext, outaudFrame);
+			totalSampAdv += numTransSamp;
+			int pktResult = avcodec_receive_packet(outaudcodcontext, outaudPacket);
+			if (pktResult != AVERROR(EAGAIN))
+			{
+				outaudPacket->stream_index = outaudstream->index;
+				outaudPacket->pts = av_rescale_q(totalSamp, { 1, outaudcodcontext->sample_rate }, outaudcodcontext->time_base);
+				outaudPacket->dts = av_rescale_q(totalSamp, { 1, outaudcodcontext->sample_rate }, outaudcodcontext->time_base);
+				av_packet_rescale_ts(outaudPacket, outaudcodcontext->time_base, outaudstream->time_base);
+				av_interleaved_write_frame(outfmtcontext, outaudPacket);
+				totalSamp = totalSampAdv;
+			}
+		}
+	}
 	int totalNumFrames = (int)((((double)(invidstream->duration)) * ((double)invidstream->time_base.num)) / ((double)invidstream->time_base.den * actualFrametime));
+	if (totalNumFrames < 0) totalNumFrames = INT32_MAX;
 	if (preview && totalNumFrames >= 300) totalNumFrames = 300;
 	std::mt19937_64 rng;
 	std::uniform_real_distribution<> ndist(-noise, noise);
 	char progString[256];
 	char progBar[256];
 	int framesInSecond = (int)(analogueEnc->bcParams->framerate + 0.5);
+	uint8_t* soundBuffer[8];
+	for (int i = 0; i < 8; i++)
+	{
+		soundBuffer[i] = new uint8_t[65536];
+	}
+	int soundWritePos = 0;
 	for (int i = 0; i < totalNumFrames; i++)
 	{
 		av_frame_make_writable(outcurFrame);
@@ -289,20 +332,20 @@ void ConversionEngine::EncodeVideo(const char* outFileName, bool preview, double
 		avcodec_send_frame(outvidcodcontext, outcurFrame);
 		avcodec_receive_packet(outvidcodcontext, outcurPacket);
 		outcurPacket->stream_index = outvidstream->index;
-		//This is not best practice but otherwise the video is out of sync with the audio and that's no good
 		//outcurPacket->pts = curFrame;
-		//outcurPacket->dts = curFrame - 2;
+		//outcurPacket->dts = curFrame;
 		av_packet_rescale_ts(outcurPacket, outvidcodcontext->time_base, outvidstream->time_base);
 		av_interleaved_write_frame(outfmtcontext, outcurPacket);
 		curFrame++;
 
 		curTime = actualFrametime * (i + 1);
 
+		int streamStatus = 0;
 		while (rrefTime < curTime)
 		{
 			av_packet_unref(incurPacket);
-			av_read_frame(infmtcontext, incurPacket);
-			if (incurPacket->data == nullptr)
+			streamStatus = av_read_frame(infmtcontext, incurPacket);
+			if (streamStatus || incurPacket->data == nullptr)
 			{
 				break;
 			}
@@ -325,18 +368,54 @@ void ConversionEngine::EncodeVideo(const char* outFileName, bool preview, double
 				avcodec_receive_frame(inaudcodcontext, incurFrame);
 				if (incurFrame->data[0] != NULL)
 				{
-					av_frame_make_writable(outaudFrame);
 					numTransSamp = av_rescale_rnd(swr_get_delay(resamplercontext, outaudcodcontext->sample_rate) + incurFrame->nb_samples, outaudcodcontext->sample_rate, outaudcodcontext->sample_rate, AV_ROUND_UP);
-					swr_convert(resamplercontext, outaudFrame->data, numTransSamp, (const unsigned char**)incurFrame->data, incurFrame->nb_samples);
-					outaudFrame->pts = av_rescale_q(totalSamp, { 1, outaudcodcontext->sample_rate }, outaudcodcontext->time_base);
-					avcodec_send_frame(outaudcodcontext, outaudFrame);
-					avcodec_receive_packet(outaudcodcontext, outaudPacket);
-					outaudPacket->stream_index = outaudstream->index;
-					outaudPacket->pts = av_rescale_q(totalSamp, { 1, outaudcodcontext->sample_rate }, outaudcodcontext->time_base);
-					outaudPacket->dts = av_rescale_q(totalSamp, { 1, outaudcodcontext->sample_rate }, outaudcodcontext->time_base);
-					av_packet_rescale_ts(outaudPacket, outaudcodcontext->time_base, outaudstream->time_base);
-					av_interleaved_write_frame(outfmtcontext, outaudPacket);
-					totalSamp += numTransSamp;
+					swr_convert(resamplercontext, soundBuffer, numTransSamp, (const unsigned char**)incurFrame->data, incurFrame->nb_samples);
+					int samplesLeft = numTransSamp;
+					for (int j = 0; j < 8; j++) //Add some noise to the audio
+					{
+						if (outaudFrame->data[j])
+						{
+							float* sBuf = (float*)soundBuffer[j];
+							for (int k = 0; k < numTransSamp; k++)
+							{
+								float inNoise = ndist(rng);
+								if (inNoise > 1.0f) inNoise = 1.0f;
+								else if (inNoise < -1.0f) inNoise = -1.0f;
+								if (inNoise < 0.0f) inNoise *= -inNoise;
+								else inNoise *= inNoise;
+								sBuf[k] += inNoise;
+							}
+						}
+					}
+					while (samplesLeft > 0)
+					{
+						av_frame_make_writable(outaudFrame);
+						int trueSampTransfer = samplesLeft;
+						int soundReadPos = numTransSamp - samplesLeft;
+						if (soundWritePos + numTransSamp > outaudFrame->nb_samples) trueSampTransfer = outaudFrame->nb_samples - soundWritePos;
+						for (int j = 0; j < 8; j++)
+						{
+							if (outaudFrame->data[j]) memcpy(outaudFrame->data[j] + (soundWritePos * sizeof(float)), soundBuffer[j] + (soundReadPos * sizeof(float)), trueSampTransfer * sizeof(float));
+						}
+						samplesLeft -= trueSampTransfer;
+						soundWritePos += trueSampTransfer;
+						if (soundWritePos < outaudFrame->nb_samples) break;
+						outaudFrame->pts = av_rescale_q(totalSampAdv, { 1, outaudcodcontext->sample_rate }, outaudcodcontext->time_base);
+						totalSampAdv += outaudFrame->nb_samples;
+						avcodec_send_frame(outaudcodcontext, outaudFrame);
+						soundWritePos = 0;
+						int pktResult = avcodec_receive_packet(outaudcodcontext, outaudPacket);
+						if (pktResult == AVERROR(EAGAIN))
+						{
+							continue;
+						}
+						outaudPacket->stream_index = outaudstream->index;
+						outaudPacket->pts = av_rescale_q(totalSamp, { 1, outaudcodcontext->sample_rate }, outaudcodcontext->time_base);
+						outaudPacket->dts = av_rescale_q(totalSamp, { 1, outaudcodcontext->sample_rate }, outaudcodcontext->time_base);
+						av_packet_rescale_ts(outaudPacket, outaudcodcontext->time_base, outaudstream->time_base);
+						av_interleaved_write_frame(outfmtcontext, outaudPacket);
+						totalSamp = totalSampAdv;
+					}
 				}
 			}
 		}
@@ -350,12 +429,32 @@ void ConversionEngine::EncodeVideo(const char* outFileName, bool preview, double
 		strcat(progString, progBar);
 		strcat(progString, "]");
 		std::cout << progString << "\r";
+		if (streamStatus < 0) break;
 	}
 	std::cout << std::endl;
 
 	//Write epilogue and finish
+	if (audstreamIndex != AVERROR_STREAM_NOT_FOUND)
+	{
+		av_frame_make_writable(outaudFrame);
+		outaudFrame->pts = av_rescale_q(totalSampAdv, { 1, outaudcodcontext->sample_rate }, outaudcodcontext->time_base);
+		outaudFrame->nb_samples = soundWritePos;
+		avcodec_send_frame(outaudcodcontext, outaudFrame);
+		avcodec_send_frame(outaudcodcontext, NULL);
+		avcodec_receive_packet(outaudcodcontext, outaudPacket);
+		outaudPacket->stream_index = outaudstream->index;
+		outaudPacket->pts = av_rescale_q(totalSamp, { 1, outaudcodcontext->sample_rate }, outaudcodcontext->time_base);
+		outaudPacket->dts = av_rescale_q(totalSamp, { 1, outaudcodcontext->sample_rate }, outaudcodcontext->time_base);
+		av_packet_rescale_ts(outaudPacket, outaudcodcontext->time_base, outaudstream->time_base);
+		av_interleaved_write_frame(outfmtcontext, outaudPacket);
+	}
+	for (int i = 0; i < 8; i++)
+	{
+		delete[] soundBuffer[i];
+	}
 	av_write_trailer(outfmtcontext);
 	avcodec_free_context(&outvidcodcontext);
+	if (audstreamIndex != AVERROR_STREAM_NOT_FOUND) avcodec_free_context(&outaudcodcontext);
 	av_frame_free(&outcurFrame);
 	av_packet_free(&outcurPacket);
 	avio_closep(&outfmtcontext->pb);
