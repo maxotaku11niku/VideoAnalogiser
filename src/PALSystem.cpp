@@ -84,7 +84,7 @@ PALSystem::PALSystem(BroadcastSystems sys, bool interlace, double resonance, dou
 SignalPack PALSystem::Encode(FrameData imgdat, int field)
 {
 	double realActiveTime = bcParams->activeTime;
-	double realScanlineTime = 1.0 / (double)(fieldScanlines * bcParams->framerate);
+	double realScanlineTime = bcParams->scanlineTime;
 	int signalLen = (int)(imgdat.width * fieldScanlines * (realScanlineTime/realActiveTime)); //To get a good analogue feel, we must limit the vertical resolution; the horizontal resolution will be limited as we decode the distorted signal.
 	float* signalOut = new float[signalLen];
 	double R = 0.0;
@@ -93,7 +93,6 @@ SignalPack PALSystem::Encode(FrameData imgdat, int field)
 	double Y = 0.0;
 	double U = 0.0;
 	double V = 0.0;
-	double time = 0;
 	int pos = 0;
 	double phaseAlternate = 1.0; //Why this is called PAL in the first place
 	int remainingSync = 0;
@@ -164,20 +163,21 @@ SignalPack PALSystem::Encode(FrameData imgdat, int field)
 	SignalPack filtVsig = ApplyFIRFilter(Vsig, chromaprefir);
 	pos = 0;
 	double frameAlternation = field & 2 ? -1.0 : 1.0;
-	double phaseAdv = fmod(field * bcParams->carrierAngFreq * bcParams->scanlineTime * 2.0, 2.0 * M_PI);
+	double fieldPhaseAdv = fmod((field % 2500) * carrierAngFreq * bcParams->frameTime, 2.0 * M_PI);
 	//Composite component signals
 	for (int i = 0; i < fieldScanlines; i++)
 	{
 		if ((i % 2) == 1) //Do phase alternation
 		{
-			phaseAlternate = -1.0 * frameAlternation;
+			phaseAlternate = -frameAlternation;
 		}
 		else phaseAlternate = frameAlternation;
+		double time = 0.0;
 		while (pos < boundaryPoints[i + 1])
 		{
-			signalOut[pos] = filtYsig.signal[pos] + filtUsig.signal[pos] * sin(carrierAngFreq * time + phaseAdv) + phaseAlternate * filtVsig.signal[pos] * cos(carrierAngFreq * time + phaseAdv); //Add chroma via QAM
+			double time = pos * sampleTime;
+			signalOut[pos] = filtYsig.signal[pos] + filtUsig.signal[pos] * sin(carrierAngFreq * time + fieldPhaseAdv) + phaseAlternate * filtVsig.signal[pos] * cos(carrierAngFreq * time + fieldPhaseAdv); //Add chroma via QAM
 			pos++;
-			time = pos * sampleTime;
 		}
 	}
 
@@ -194,7 +194,7 @@ SignalPack PALSystem::Encode(FrameData imgdat, int field)
 FrameData PALSystem::Decode(SignalPack signal, int field, double crosstalk)
 {
     double realActiveTime = bcParams->activeTime;
-    double realScanlineTime = 1.0 / (double)(fieldScanlines * bcParams->framerate);
+    double realScanlineTime = bcParams->scanlineTime;
     double realFrameTime = (interlaced ? 2.0 : 1.0) / bcParams->framerate;
     int R = 0;
     int G = 0;
@@ -212,19 +212,18 @@ FrameData PALSystem::Decode(SignalPack signal, int field, double crosstalk)
     SignalPack newSignal = ApplyFIRFilter(signal, mainfir);
 
 	//Extract QAM colour signals
-    double time = 0.0;
     double carrierAngFreq = bcParams->carrierAngFreq;
-	double phaseAdv = fmod(field * bcParams->carrierAngFreq * bcParams->scanlineTime * 2.0, 2.0 * M_PI);
-	double phOffs = 0.0;
+	double fieldPhaseAdv = fmod((field % 2500) * carrierAngFreq * bcParams->frameTime, 2.0 * M_PI);
 	double frameAlternation = field & 2 ? -1.0 : 1.0;
 	for (int i = 0; i < fieldScanlines; i++)
 	{
-		phOffs = phNoiseGen->GenNoise();
+		double phOffs = phNoiseGen->GenNoise();
+		double phaseAdv = fmod(phOffs + fieldPhaseAdv, 2.0 * M_PI);
 		while (pos < boundaryPoints[i + 1])
 		{
-			time = pos * sampleTime;
-			USignalPreAlt[pos] = colsignal.signal[pos] * sin(carrierAngFreq * time + phOffs + phaseAdv) * 2.0;
-			VSignalPreAlt[pos] = frameAlternation * colsignal.signal[pos] * cos(carrierAngFreq * time + phOffs + phaseAdv) * 2.0;
+			double time = pos * sampleTime;
+			USignalPreAlt[pos] = colsignal.signal[pos] * sin(carrierAngFreq * time + phaseAdv) * 2.0;
+			VSignalPreAlt[pos] = frameAlternation * colsignal.signal[pos] * cos(carrierAngFreq * time + phaseAdv) * 2.0;
 			pos++;
 		}
 	}

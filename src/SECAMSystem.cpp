@@ -81,7 +81,7 @@ SECAMSystem::SECAMSystem(BroadcastSystems sys, bool interlace, double resonance,
 SignalPack SECAMSystem::Encode(FrameData imgdat, int field)
 {
     double realActiveTime = bcParams->activeTime;
-    double realScanlineTime = 1.0 / (double)(fieldScanlines * bcParams->framerate);
+    double realScanlineTime = bcParams->scanlineTime;
     int signalLen = (int)(imgdat.width * fieldScanlines * (realScanlineTime / realActiveTime)); //To get a good analogue feel, we must limit the vertical resolution; the horizontal resolution will be limited as we decode the distorted signal.
     float* signalOut = new float[signalLen];
     double R = 0.0;
@@ -106,7 +106,6 @@ SignalPack SECAMSystem::Encode(FrameData imgdat, int field)
         activeSignalStarts[i] = (int)((((double)i * (double)signalLen) / (double)fieldScanlines) + ((realScanlineTime - realActiveTime) / (2 * realActiveTime)) * imgdat.width) - boundaryPoints[i];
     }
 
-    double instantPhase = 0.0;
     int* imgColours = imgdat.image;
     int currentScanline;
     double finSamp = 0.0;
@@ -160,35 +159,49 @@ SignalPack SECAMSystem::Encode(FrameData imgdat, int field)
     SignalPack filtDbsig = ApplyFIRFilter(Dbsig, chromaprefir);
     SignalPack filtDrsig = ApplyFIRFilter(Drsig, chromaprefir);
     pos = 0;
-    double scAngFreq = 0.0;
-    double scAngFreqShift = 0.0;
     float* curChromaSig;
+    double instantPhaseDb = 0.0;
+    double instantPhaseDr = 0.0;
+    double scAngFreqDb = bcParams->carrierAngFreqDb;
+    double scAngFreqShiftDb = bcParams->deltaAngFreqDb;
+    double scAngFreqDr = bcParams->carrierAngFreqDr;
+    double scAngFreqShiftDr = bcParams->deltaAngFreqDr;
     //Composite component signals
     for (int i = 0; i < fieldScanlines; i++)
     {
         if ((i % 2) == 1) //SECAM alternates between Db and Dr with each scanline
         {
-            scAngFreq = bcParams->carrierAngFreqDr;
-            scAngFreqShift = bcParams->deltaAngFreqDr;
             curChromaSig = filtDrsig.signal;
+            for (int j = 0; j < subcarrierstartind; j++)
+            {
+                signalOut[pos] = filtYsig2.signal[pos];
+                instantPhaseDr += sampleTime * scAngFreqDr;
+                pos++;
+            }
+            while (pos < boundaryPoints[i + 1])
+            {
+                signalOut[pos] = filtYsig2.signal[pos] + 0.115 * cos(instantPhaseDr); //Add chroma via FM
+                instantPhaseDr += sampleTime * (scAngFreqDr + scAngFreqShiftDr * (double)curChromaSig[pos]);
+                pos++;
+            }
+            instantPhaseDb = fmod(instantPhaseDr, 2.0 * M_PI);
         }
         else
         {
-            scAngFreq = bcParams->carrierAngFreqDb;
-            scAngFreqShift = bcParams->deltaAngFreqDb;
             curChromaSig = filtDbsig.signal;
-        }
-        for (int j = 0; j < subcarrierstartind; j++)
-        {
-            signalOut[pos] = filtYsig2.signal[pos];
-            pos++;
-        }
-        instantPhase = 0.0;
-        while (pos < boundaryPoints[i + 1])
-        {
-            instantPhase += sampleTime * (scAngFreq + scAngFreqShift * (double)curChromaSig[pos]);
-            signalOut[pos] = filtYsig2.signal[pos] + 0.115 * cos(instantPhase); //Add chroma via FM
-            pos++;
+            for (int j = 0; j < subcarrierstartind; j++)
+            {
+                signalOut[pos] = filtYsig2.signal[pos];
+                instantPhaseDb += sampleTime * scAngFreqDb;
+                pos++;
+            }
+            while (pos < boundaryPoints[i + 1])
+            {
+                signalOut[pos] = filtYsig2.signal[pos] + 0.115 * cos(instantPhaseDb); //Add chroma via FM
+                instantPhaseDb += sampleTime * (scAngFreqDb + scAngFreqShiftDb * (double)curChromaSig[pos]);
+                pos++;
+            }
+            instantPhaseDb = fmod(instantPhaseDb, 2.0 * M_PI);
         }
     }
 
@@ -206,7 +219,7 @@ SignalPack SECAMSystem::Encode(FrameData imgdat, int field)
 FrameData SECAMSystem::Decode(SignalPack signal, int field, double crosstalk)
 {
     double realActiveTime = bcParams->activeTime;
-    double realScanlineTime = 1.0 / (double)(fieldScanlines * bcParams->framerate);
+    double realScanlineTime = bcParams->scanlineTime;
     double realFrameTime = (interlaced ? 2.0 : 1.0) / bcParams->framerate;
     int R = 0;
     int G = 0;

@@ -16,25 +16,25 @@ const BroadcastStandard SystemM = { 4.2e+6,  //Main Bandwidth
                               0.75e+6, //Side Bandwidth
                               1.3e+6, //Colour bandwidth lower part
                               0.62e+6, //Colour bandwidth upper part
-                              3579545.0, //Colour subcarrier frequency
+                              3579545.45454544, //Colour subcarrier frequency
                               525, //Total scanlines
                               480, //Visible scanlines
-                              59.94005994, //Nominal framerate
+                              59.94005994005994, //Nominal framerate
                               {1001, 60000}, //Nominal timebase (for libav*)
                               5.26555e-5, //Nominal active video time (per scanline)
-                              3579545.0 * 2.0 * M_PI, //Colour subcarrier angular frequency
-                              1.0 / 59.94005994, //Nominal frametime
-                              1.0 / (59.94005994 * 525.0), //Nominal scanline time
-                              3501420.0, //Db subcarrier frequency (SECAM only)
-                              3657670.0, //Dr subcarrier frequency (SECAM only)
+                              3579545.45454544 * 2.0 * M_PI, //Colour subcarrier angular frequency
+                              1.0 / 59.94005994005994, //Nominal frametime
+                              1.0 / (29.97002997002997 * 525.0), //Nominal scanline time
+                              3524475.52447551, //Db subcarrier frequency (SECAM only)
+                              3681818.18181816, //Dr subcarrier frequency (SECAM only)
                               1012000.0, //Db bandwidth lower part (SECAM only)
                               700000.0, //Db bandwidth upper part (SECAM only)
                               700000.0, //Dr bandwidth lower part (SECAM only)
                               1012000.0, //Dr bandwidth upper part (SECAM only)
                               230000.0 * 2.0 * M_PI, //Db frequency shift amount (SECAM only)
                               280000.0 * 2.0 * M_PI, //Dr frequency shift amount (SECAM only)
-                              3501420.0 * 2.0 * M_PI, //Db subcarrier angular frequency (SECAM only)
-                              3657670.0 * 2.0 * M_PI, //Dr subcarrier angular frequency (SECAM only)
+                              3524475.52447551 * 2.0 * M_PI, //Db subcarrier angular frequency (SECAM only)
+                              3681818.18181816 * 2.0 * M_PI, //Dr subcarrier angular frequency (SECAM only)
 };
 
 const BroadcastStandard SystemN = { 4.2e+6,  //Main Bandwidth
@@ -49,7 +49,7 @@ const BroadcastStandard SystemN = { 4.2e+6,  //Main Bandwidth
                               5.2e-5, //Nominal active video time (per scanline)
                               4433618.75 * 2.0 * M_PI, //Colour subcarrier angular frequency
                               1.0 / 50.0, //Nominal frametime
-                              1.0 / (50.0 * 625.0), //Nominal scanline time
+                              1.0 / (25.0 * 625.0), //Nominal scanline time
                               4250000.0, //Db subcarrier frequency (SECAM only)
                               4406250.0, //Dr subcarrier frequency (SECAM only)
                               1012000.0, //Db bandwidth lower part (SECAM only)
@@ -74,7 +74,7 @@ const BroadcastStandard SystemB = { 5.0e+6,  //Main Bandwidth
                               5.2e-5, //Nominal active video time (per scanline)
                               4433618.75 * 2.0 * M_PI, //Colour subcarrier angular frequency
                               1.0 / 50.0, //Nominal frametime
-                              1.0 / (50.0 * 625.0), //Nominal scanline time
+                              1.0 / (25.0 * 625.0), //Nominal scanline time
                               4250000.0, //Db subcarrier frequency (SECAM only)
                               4406250.0, //Dr subcarrier frequency (SECAM only)
                               1012000.0, //Db bandwidth lower part (SECAM only)
@@ -99,7 +99,7 @@ const BroadcastStandard SystemG = { 5.0e+6,  //Main Bandwidth
                               5.2e-5, //Nominal active video time (per scanline)
                               4433618.75 * 2.0 * M_PI, //Colour subcarrier angular frequency
                               1.0 / 50.0, //Nominal frametime
-                              1.0 / (50.0 * 625.0), //Nominal scanline time
+                              1.0 / (25.0 * 625.0), //Nominal scanline time
                               4250000.0, //Db subcarrier frequency (SECAM only)
                               4406250.0, //Dr subcarrier frequency (SECAM only)
                               1012000.0, //Db bandwidth lower part (SECAM only)
@@ -124,7 +124,7 @@ const BroadcastStandard SystemH = { 5.0e+6,  //Main Bandwidth
                               5.2e-5, //Nominal active video time (per scanline)
                               4433618.75 * 2.0 * M_PI, //Colour subcarrier angular frequency
                               1.0 / 50.0, //Nominal frametime
-                              1.0 / (50.0 * 625.0), //Nominal scanline time
+                              1.0 / (25.0 * 625.0), //Nominal scanline time
                               4250000.0, //Db subcarrier frequency (SECAM only)
                               4406250.0, //Dr subcarrier frequency (SECAM only)
                               1012000.0, //Db bandwidth lower part (SECAM only)
@@ -149,7 +149,7 @@ const BroadcastStandard SystemI = { 5.5e+6,  //Main Bandwidth
                               5.2e-5, //Nominal active video time (per scanline)
                               4433618.75 * 2.0 * M_PI, //Colour subcarrier angular frequency
                               1.0 / 50.0, //Nominal frametime
-                              1.0 / (50.0 * 625.0), //Nominal scanline time
+                              1.0 / (25.0 * 625.0), //Nominal scanline time
                               4250000.0, //Db subcarrier frequency (SECAM only)
                               4406250.0, //Dr subcarrier frequency (SECAM only)
                               1012000.0, //Db bandwidth lower part (SECAM only)
@@ -174,7 +174,7 @@ const BroadcastStandard SystemD = { 6.0e+6,  //Main Bandwidth
                               5.2e-5, //Nominal active video time (per scanline)
                               4433618.75 * 2.0 * M_PI, //Colour subcarrier angular frequency
                               1.0 / 50.0, //Nominal frametime
-                              1.0 / (50.0 * 625.0), //Nominal scanline time
+                              1.0 / (25.0 * 625.0), //Nominal scanline time
                               4250000.0, //Db subcarrier frequency (SECAM only)
                               4406250.0, //Dr subcarrier frequency (SECAM only)
                               1012000.0, //Db bandwidth lower part (SECAM only)
@@ -199,7 +199,7 @@ const BroadcastStandard SystemK = { 6.0e+6,  //Main Bandwidth
                               5.2e-5, //Nominal active video time (per scanline)
                               4433618.75 * 2.0 * M_PI, //Colour subcarrier angular frequency
                               1.0 / 50.0, //Nominal frametime
-                              1.0 / (50.0 * 625.0), //Nominal scanline time
+                              1.0 / (25.0 * 625.0), //Nominal scanline time
                               4250000.0, //Db subcarrier frequency (SECAM only)
                               4406250.0, //Dr subcarrier frequency (SECAM only)
                               1012000.0, //Db bandwidth lower part (SECAM only)
@@ -224,7 +224,7 @@ const BroadcastStandard SystemL = { 6.0e+6,  //Main Bandwidth
                               5.2e-5, //Nominal active video time (per scanline)
                               4433618.75 * 2.0 * M_PI, //Colour subcarrier angular frequency
                               1.0 / 50.0, //Nominal frametime
-                              1.0 / (50.0 * 625.0), //Nominal scanline time
+                              1.0 / (25.0 * 625.0), //Nominal scanline time
                               4250000.0, //Db subcarrier frequency (SECAM only)
                               4406250.0, //Dr subcarrier frequency (SECAM only)
                               1012000.0, //Db bandwidth lower part (SECAM only)
@@ -241,25 +241,25 @@ const BroadcastStandard TapeVHS525 =  { 3.4e+6,  //Main Bandwidth
                               0.1e+6, //Side Bandwidth
                               0.629e+6, //Colour bandwidth lower part
                               0.629e+6, //Colour bandwidth upper part
-                              3579545.0, //Colour subcarrier frequency
+                              3579545.45454544, //Colour subcarrier frequency
                               525, //Total scanlines
                               480, //Visible scanlines
-                              59.94005994, //Nominal framerate
+                              59.94005994005994, //Nominal framerate
                               {1001, 60000}, //Nominal timebase (for libav*)
                               5.26555e-5, //Nominal active video time (per scanline)
-                              3579545.0 * 2.0 * M_PI, //Colour subcarrier angular frequency
-                              1.0 / 59.94005994, //Nominal frametime
-                              1.0 / (59.94005994 * 525.0), //Nominal scanline time
-                              3501420.0, //Db subcarrier frequency (SECAM only)
-                              3657670.0, //Dr subcarrier frequency (SECAM only)
+                              3579545.45454544 * 2.0 * M_PI, //Colour subcarrier angular frequency
+                              1.0 / 59.94005994005994, //Nominal frametime
+                              1.0 / (29.97002997002997 * 525.0), //Nominal scanline time
+                              3524475.52447551, //Db subcarrier frequency (SECAM only)
+                              3681818.18181816, //Dr subcarrier frequency (SECAM only)
                               1012000.0, //Db bandwidth lower part (SECAM only)
                               700000.0, //Db bandwidth upper part (SECAM only)
                               700000.0, //Dr bandwidth lower part (SECAM only)
                               1012000.0, //Dr bandwidth upper part (SECAM only)
                               230000.0 * 2.0 * M_PI, //Db frequency shift amount (SECAM only)
                               280000.0 * 2.0 * M_PI, //Dr frequency shift amount (SECAM only)
-                              3501420.0 * 2.0 * M_PI, //Db subcarrier angular frequency (SECAM only)
-                              3657670.0 * 2.0 * M_PI, //Dr subcarrier angular frequency (SECAM only)
+                              3524475.52447551 * 2.0 * M_PI, //Db subcarrier angular frequency (SECAM only)
+                              3681818.18181816 * 2.0 * M_PI, //Dr subcarrier angular frequency (SECAM only)
 };
 
 const BroadcastStandard TapeVHS625 = { 3.4e+6,  //Main Bandwidth
@@ -274,7 +274,7 @@ const BroadcastStandard TapeVHS625 = { 3.4e+6,  //Main Bandwidth
                               5.2e-5, //Nominal active video time (per scanline)
                               4433618.75 * 2.0 * M_PI, //Colour subcarrier angular frequency
                               1.0 / 50.0, //Nominal frametime
-                              1.0 / (50.0 * 625.0), //Nominal scanline time
+                              1.0 / (25.0 * 625.0), //Nominal scanline time
                               4250000.0, //Db subcarrier frequency (SECAM only)
                               4406250.0, //Dr subcarrier frequency (SECAM only)
                               1012000.0, //Db bandwidth lower part (SECAM only)

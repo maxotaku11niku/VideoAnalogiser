@@ -81,7 +81,7 @@ NTSCSystem::NTSCSystem(BroadcastSystems sys, bool interlace, double resonance, d
 SignalPack NTSCSystem::Encode(FrameData imgdat, int field)
 {
     double realActiveTime = bcParams->activeTime;
-    double realScanlineTime = 1.0 / (double)(fieldScanlines * bcParams->framerate);
+    double realScanlineTime = bcParams->scanlineTime;
     int signalLen = (int)(imgdat.width * fieldScanlines * (realScanlineTime / realActiveTime)); //To get a good analogue feel, we must limit the vertical resolution; the horizontal resolution will be limited as we decode the distorted signal.
     float* signalOut = new float[signalLen];
     double R = 0.0;
@@ -89,7 +89,6 @@ SignalPack NTSCSystem::Encode(FrameData imgdat, int field)
     double B = 0.0;
     double Q = 0.0;
     double I = 0.0;
-    double time = 0.0;
     int pos = 0;
     int remainingSync = 0;
     double sampleTime = realActiveTime / (double)imgdat.width;
@@ -126,7 +125,6 @@ SignalPack NTSCSystem::Encode(FrameData imgdat, int field)
             Isig.signal[pos] = 0.0f;
             Qsig.signal[pos] = 0.0f;
             pos++;
-            time = pos * sampleTime;
         }
         for (int j = 0; j < w; j++) //Active signal
         {
@@ -144,7 +142,6 @@ SignalPack NTSCSystem::Encode(FrameData imgdat, int field)
             Isig.signal[pos] = RGBtoYIQConversionMatrix[3] * R + RGBtoYIQConversionMatrix[4] * G + RGBtoYIQConversionMatrix[5] * B;
             Qsig.signal[pos] = RGBtoYIQConversionMatrix[6] * R + RGBtoYIQConversionMatrix[7] * G + RGBtoYIQConversionMatrix[8] * B;
             pos++;
-            time = pos * sampleTime;
         }
         while (pos < boundaryPoints[i + 1]) //Back porch, ignore sync signal because we don't see its results
         {
@@ -152,7 +149,6 @@ SignalPack NTSCSystem::Encode(FrameData imgdat, int field)
             Isig.signal[pos] = 0.0f;
             Qsig.signal[pos] = 0.0f;
             pos++;
-            time = pos * sampleTime;
         }
     }
 
@@ -160,12 +156,12 @@ SignalPack NTSCSystem::Encode(FrameData imgdat, int field)
     SignalPack filtYsig = ApplyFIRFilter(Ysig, lumaprefir);
     SignalPack filtIsig = ApplyFIRFilter(Isig, iprefir);
     SignalPack filtQsig = ApplyFIRFilter(Qsig, qprefir);
-    double phaseAdv = fmod(field * bcParams->carrierAngFreq * bcParams->scanlineTime * 2.0, 2.0 * M_PI);
+    double fieldPhaseAdv = fmod((field % 2500) * carrierAngFreq * bcParams->frameTime + chromaPhase, 2.0 * M_PI);
     //Composite component signals
     for (int i = 0; i < signalLen; i++)
     {
-        time = i * sampleTime;
-        signalOut[i] = filtYsig.signal[i] + filtQsig.signal[i] * sin(carrierAngFreq * time + chromaPhase + phaseAdv) + filtIsig.signal[i] * cos(carrierAngFreq * time + chromaPhase + phaseAdv); //Add chroma via QAM
+        double time = i * sampleTime;
+        signalOut[i] = filtYsig.signal[i] + filtQsig.signal[i] * sin(carrierAngFreq * time + fieldPhaseAdv) + filtIsig.signal[i] * cos(carrierAngFreq * time + fieldPhaseAdv); //Add chroma via QAM
     }
 
     delete[] Ysig.signal;
@@ -181,7 +177,7 @@ SignalPack NTSCSystem::Encode(FrameData imgdat, int field)
 FrameData NTSCSystem::Decode(SignalPack signal, int field, double crosstalk)
 {
     double realActiveTime = bcParams->activeTime;
-    double realScanlineTime = 1.0 / (double)(fieldScanlines * bcParams->framerate);
+    double realScanlineTime = bcParams->scanlineTime;
     double realFrameTime = (interlaced ? 2.0 : 1.0) / bcParams->framerate;
     int R = 0;
     int G = 0;
@@ -203,17 +199,16 @@ FrameData NTSCSystem::Decode(SignalPack signal, int field, double crosstalk)
     SignalPack newSignal = ApplyFIRFilter(signal, mainfir);
 
     //Extract QAM colour signals
-    double time = 0.0;
-    double phaseAdv = fmod(field * bcParams->carrierAngFreq * bcParams->scanlineTime * 2.0, 2.0 * M_PI);
-    double phOffs = 0.0;
+    double fieldPhaseAdv = fmod((field % 2500) * carrierAngFreq * bcParams->frameTime + chromaPhase, 2.0 * M_PI);
     for (int i = 0; i < fieldScanlines; i++)
     {
-        phOffs = phNoiseGen->GenNoise() + chromaPhase;
+        double phOffs = phNoiseGen->GenNoise();
+        double phaseAdv = fmod(phOffs + fieldPhaseAdv, 2.0 * M_PI);
         while (pos < boundaryPoints[i + 1])
         {
-            time = pos * sampleTime;
-            QSignal.signal[pos] = QSignal.signal[pos] * sin(carrierAngFreq * time + phOffs + phaseAdv) * 2.0;
-            ISignal.signal[pos] = ISignal.signal[pos] * cos(carrierAngFreq * time + phOffs + phaseAdv) * 2.0;
+            double time = pos * sampleTime;
+            QSignal.signal[pos] = QSignal.signal[pos] * sin(carrierAngFreq * time + phaseAdv) * 2.0;
+            ISignal.signal[pos] = ISignal.signal[pos] * cos(carrierAngFreq * time + phaseAdv) * 2.0;
             pos++;
         }
     }
