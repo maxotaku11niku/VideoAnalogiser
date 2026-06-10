@@ -106,7 +106,6 @@ FIRFilter MakeFIRFilter(double sampleRate, int size, double center, double width
     {
         sum += outfir[i];
     }
-    sum *= 1.07; //somehow still too bright otherwise, a very naughty fudge factor indeed
     for (int i = backport - truebackport; i < truesize + backport - truebackport; i++)
     {
         outfir[i] /= sum;
@@ -174,7 +173,7 @@ SignalPack ApplyFIRFilter(SignalPack signal, FIRFilter fir)
         output[i] = outsig;
     }
 
-    return  { output, signal.len };
+    return { output, signal.len };
 }
 
 SignalPack ApplyFIRFilterNotch(SignalPack signal, FIRFilter fir)

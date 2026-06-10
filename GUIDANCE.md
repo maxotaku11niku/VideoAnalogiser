@@ -6,15 +6,15 @@ VideoAnalogiser has a few settings, and it may not be immediately obvious what t
 
 Displays a help dialog that reminds you of these commands, then quits.
 
-## `-bsys [system]`
+## `-bsys <system>`
 
 Determines the broadcast standard to use, which is how you specify the resolution and framerate of the video. Defaults to M for NTSC, I for PAL and L for SECAM. Valid values are `m`, `n`, `b`, `g`, `h`, `i`, `d`, `k`, `l`, `vhs525`, `vhs625`.
 
-## `-bsyshelp [system]`
+## `-bsyshelp <system>`
 
 Displays parameters of the given broadcast system, then quits the program.
 
-## `-csys [system]`
+## `-csys <system>`
 
 Determines the colour system to use, which can dramatically affect the output image. This program supports all the 3 major formats that were used in the era of analogue TV:
 
@@ -32,35 +32,35 @@ This is the 'quick VHS' option. This switches the broadcast standard to VHS, wit
 
 Generates 300 frames of video, rather than the full length. This is intended as a quick preview though it may still take a couple of minutes to make the preview.
 
-## `-noise [amount]`
+## `-noise <amount>`
 
-Adds white noise to the signal, with `[amount]` controlling its magnitude. This will require you to up the bitrate if you take it too far, so be careful. Recommended values 0.0 - 0.5. Defaults to 0.0.
+Adds white noise to the signal, with `<amount>` controlling its magnitude. This will make the output video file much bigger if you take it too far, so be careful. This will also add noise to the audio track. Recommended values 0.0 - 0.5. Defaults to 0.0.
 
-## `-jitter [amount]`
+## `-jitter <amount>`
 
 Simulates noise in the scanning mechanism. Upping this value will cause the video to become shaky and wobbly. Recommended values 0.0 - 0.01. Defaults to 0.0.
 
-## `-reso [amount]`
+## `-reso <amount>`
 
 Affects how sharp the frequency cutoffs are in the decode filters. High values will cause ringing artifacts to appear. Recommended values 2.0 - 20.0. Defaults to 5.0.
 
-## `-prefreq [amount]`
+## `-prefreq <amount>`
 
 Affects the width of the encoding prefilters. This is a multiplier to the usual decode filter width as specified by the broadcast standard. This can be used to simulate poor quality recording equipment and to manage crosstalk artifacts. Recommended values 0.1 - 1.0. Defaults to 0.7.
 
-## `-psnoise [amount]`
+## `-psnoise <amount>`
 
 Simulates noise in the phase of the subcarrier decoder, over each scanline. Upping this value will cause multicoloured streaks to appear. This won't affect the colours of SECAM. Recommended values 0.0 - 3.0. Defaults to 0.0.
 
-## `-crosstalk [amount]`
+## `-crosstalk <amount>`
 
 Affects how much the chroma and luma information mix. Upping this value will strengthen the dot patterns on the screen and cause colours to shift. Recommended values 0.0 - 1.0. Defaults to 0.0.
 
-## `-noiseexp [amount]`
+## `-noiseexp <amount>`
 
 Affects the noise spectrum exponent of jitter and scanline noise, which goes as f^-amount. Recommended values 0.0 - 1.0. Defaults to 0.5.
 
-## `-text [text]`
+## `-text <text>`
 
 Puts the following text in the top left of the video, using the stereotypical VHS recorder font.
 

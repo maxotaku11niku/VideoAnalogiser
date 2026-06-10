@@ -74,17 +74,6 @@ SECAMSystem::SECAMSystem(BroadcastSystems sys, bool interlace, double resonance,
     lumaprefir = MakeFIRFilter(sampleRate, 256, 0.0, 2.0 * bcParams->mainBandwidth * prefilterMult, PREFILTER_RESONANCE);
     chromaprefir = MakeFIRFilter(sampleRate, 256, 0.0, 2.0 * bcParams->chromaBandwidthLower * prefilterMult, PREFILTER_RESONANCE);
 
-    /*/
-    DbSignalI = new float[signalLen];
-    DbSignalQ = new float[signalLen];
-    DrSignalI = new float[signalLen];
-    DrSignalQ = new float[signalLen];
-    DbSignalC = new float[signalLen];
-    DbSignalS = new float[signalLen];
-    DrSignalC = new float[signalLen];
-    DrSignalS = new float[signalLen];
-    //*/
-
     jitGen = new MultiOctaveNoiseGen(11, 0.0, scanlineJitter * activeWidth, noiseExponent);
     phNoiseGen = new MultiOctaveNoiseGen(11, 0.0, phaseNoise, noiseExponent);
 }
@@ -166,7 +155,8 @@ SignalPack SECAMSystem::Encode(FrameData imgdat, int field)
     }
 
     //Prefilter signals
-    SignalPack filtYsig = ApplyFIRFilter(Ysig, lumaprefir);
+    SignalPack filtYsig1 = ApplyFIRFilter(Ysig, lumaprefir);
+    SignalPack filtYsig2 = ApplyFIRFilterNotchShift(filtYsig1, chromaprefir, sampleTime, bcParams->carrierAngFreq);
     SignalPack filtDbsig = ApplyFIRFilter(Dbsig, chromaprefir);
     SignalPack filtDrsig = ApplyFIRFilter(Drsig, chromaprefir);
     pos = 0;
@@ -190,13 +180,14 @@ SignalPack SECAMSystem::Encode(FrameData imgdat, int field)
         }
         for (int j = 0; j < subcarrierstartind; j++)
         {
-            signalOut[pos] = 0.0;
+            signalOut[pos] = filtYsig2.signal[pos];
+            pos++;
         }
         instantPhase = 0.0;
         while (pos < boundaryPoints[i + 1])
         {
             instantPhase += sampleTime * (scAngFreq + scAngFreqShift * (double)curChromaSig[pos]);
-            signalOut[pos] = filtYsig.signal[pos] + 0.115 * cos(instantPhase); //Add chroma via FM
+            signalOut[pos] = filtYsig2.signal[pos] + 0.115 * cos(instantPhase); //Add chroma via FM
             pos++;
         }
     }
@@ -204,7 +195,8 @@ SignalPack SECAMSystem::Encode(FrameData imgdat, int field)
     delete[] Ysig.signal;
     delete[] Dbsig.signal;
     delete[] Drsig.signal;
-    delete[] filtYsig.signal;
+    delete[] filtYsig1.signal;
+    delete[] filtYsig2.signal;
     delete[] filtDbsig.signal;
     delete[] filtDrsig.signal;
 
@@ -235,57 +227,6 @@ FrameData SECAMSystem::Decode(SignalPack signal, int field, double crosstalk)
     SignalPack DbSignal = ApplyFIRFilterCrosstalkShift(signal, colfir, crosstalk, sampleTime, bcParams->carrierAngFreqDb);
     SignalPack DrSignal = ApplyFIRFilterCrosstalkShift(signal, colfir, crosstalk, sampleTime, bcParams->carrierAngFreqDr);
     SignalPack newSignal = ApplyFIRFilter(signal, mainfir);
-    
-    /*/
-    double time = 0.0;
-    double phOffs = 0.0;
-    double scAngFreqDb = bcParams->carrierAngFreqDb;
-    double scAngFreqDr = bcParams->carrierAngFreqDr;
-    double scAngFreqShiftDb = bcParams->deltaAngFreqDb;
-    double scAngFreqShiftDr = bcParams->deltaAngFreqDr;
-    for (int i = 0; i < fieldScanlines; i++)
-    {
-        phOffs = phNoiseGen->GenNoise();
-        while (pos < boundaryPoints[i + 1])
-        {
-            time = pos * sampleTime;
-            DbSignalI[pos] = DbSignal.signal[pos] * sin(scAngFreqDb * time + phOffs);
-            DbSignalQ[pos] = DbSignal.signal[pos] * cos(scAngFreqDb * time + phOffs);
-            DrSignalI[pos] = DrSignal.signal[pos] * sin(scAngFreqDr * time + phOffs);
-            DrSignalQ[pos] = DrSignal.signal[pos] * cos(scAngFreqDr * time + phOffs);
-            pos++;
-        }
-    }
-
-    SignalPack filtDbSignalI = ApplyFIRFilter({ DbSignalI, signal.len }, dbfir);
-    SignalPack filtDbSignalQ = ApplyFIRFilter({ DbSignalQ, signal.len }, dbfir);
-    SignalPack filtDrSignalI = ApplyFIRFilter({ DrSignalI, signal.len }, drfir);
-    SignalPack filtDrSignalQ = ApplyFIRFilter({ DrSignalQ, signal.len }, drfir);
-
-    time = 0.0;
-    double recAngFreq = 10000000.0;
-    for (int i = 0; i < signal.len; i++)
-    {
-        time = i * sampleTime;
-        DbSignalC[i] = (2 / 0.115) * (sin(recAngFreq * time) * filtDbSignalI.signal[i] + cos(recAngFreq * time) * filtDbSignalQ.signal[i]);
-        DbSignalS[i] = (2 / 0.115) * (sin(recAngFreq * time) * filtDbSignalQ.signal[i] - cos(recAngFreq * time) * filtDbSignalI.signal[i]);
-        DrSignalC[i] = (2 / 0.115) * (sin(recAngFreq * time) * filtDrSignalI.signal[i] + cos(recAngFreq * time) * filtDrSignalQ.signal[i]);
-        DrSignalS[i] = (2 / 0.115) * (sin(recAngFreq * time) * filtDrSignalQ.signal[i] - cos(recAngFreq * time) * filtDrSignalI.signal[i]);
-    }
-
-    double diffC = 0.0;
-    double diffS = 0.0;
-    double sampleRate = (double)activeWidth / realActiveTime;
-    for (int i = 1; i < signal.len; i++)
-    {
-        diffC = (DbSignalC[i] - DbSignalC[i - 1]) * sampleRate;
-        diffS = (DbSignalS[i] - DbSignalS[i - 1]) * sampleRate;
-        DbSignal.signal[i] = (((sqrt(diffC * diffC + diffS * diffS) - recAngFreq) / (scAngFreqShiftDb)) + 0.58);
-        diffC = (DrSignalC[i] - DrSignalC[i - 1]) * sampleRate;
-        diffS = (DrSignalS[i] - DrSignalS[i - 1]) * sampleRate;
-        DrSignal.signal[i] = (((sqrt(diffC * diffC + diffS * diffS) - recAngFreq) / (scAngFreqShiftDr)) + 0.58);
-    }
-    //*/
 
     /**/
     //Extract FM colour signals (does anyone have a better way to do this rather than this hacky way?)
@@ -307,20 +248,22 @@ FrameData SECAMSystem::Decode(SignalPack signal, int field, double crosstalk)
     double DrFreqShift = 0.0;
     double DbLastFreqShift = 0.0;
     double DrLastFreqShift = 0.0;
+    SignalPack DbDecodedSignal = { new float[signal.len], signal.len };
+    SignalPack DrDecodedSignal = { new float[signal.len], signal.len };
     for (int i = 0; i < signal.len; i++) //Somehow this bunch of magic acts as a functional FM decoder
     {
+        DbLast = DbSignal.signal[i - 1];
+        DrLast = DrSignal.signal[i - 1];
         DbDeriv = (double)DbSignal.signal[i] - DbLast;
         DrDeriv = (double)DrSignal.signal[i] - DrLast;
-        DbLast = DbSignal.signal[i];
-        DrLast = DrSignal.signal[i];
         curDb = (DbDecodeAngFreq - scAngFreqDb) / scAngFreqShiftDb;
         curDr = (DrDecodeAngFreq - scAngFreqDr) / scAngFreqShiftDr;
-        DbSignal.signal[i] = curDb;
-        DrSignal.signal[i] = curDr;
-        DbFreqShift = -(cos(DbDecodePhase) * DbDeriv) - (DbDecodeAngFreq * sin(DbDecodePhase) * DbLast);
-        DrFreqShift = -(cos(DrDecodePhase) * DrDeriv) - (DrDecodeAngFreq * sin(DrDecodePhase) * DrLast);
-        DbDecodeAngFreq += 1.1 * (DbFreqShift - DbLastFreqShift);
-        DrDecodeAngFreq += 1.1 * (DrFreqShift - DrLastFreqShift);
+        DbDecodedSignal.signal[i] = curDb;
+        DrDecodedSignal.signal[i] = curDr;
+        DbFreqShift = -(cos(DbDecodePhase) * DbDeriv) - (DbDecodeAngFreq * sin(DbDecodePhase) * DbSignal.signal[i]);
+        DrFreqShift = -(cos(DrDecodePhase) * DrDeriv) - (DrDecodeAngFreq * sin(DrDecodePhase) * DrSignal.signal[i]);
+        DbDecodeAngFreq += 1.5 * (DbFreqShift - DbLastFreqShift);
+        DrDecodeAngFreq += 1.5 * (DrFreqShift - DrLastFreqShift);
         DbDecodePhase += sampleTime * DbDecodeAngFreq;
         DrDecodePhase += sampleTime * DrDecodeAngFreq;
         DbLastFreqShift = DbFreqShift;
@@ -329,8 +272,8 @@ FrameData SECAMSystem::Decode(SignalPack signal, int field, double crosstalk)
     //*/
 
     SignalPack finalSignal = ApplyFIRFilterNotchCrosstalkShift(newSignal, colfir, crosstalk, sampleTime, bcParams->carrierAngFreq);
-    SignalPack finalDbSignal = ApplyFIRFilter(DbSignal, dbfir);
-    SignalPack finalDrSignal = ApplyFIRFilter(DrSignal, drfir);
+    SignalPack finalDbSignal = ApplyFIRFilter(DbDecodedSignal, dbfir);
+    SignalPack finalDrSignal = ApplyFIRFilter(DrDecodedSignal, drfir);
 
     FrameData writeToSurface = { new int[activeWidth * fieldScanlines], activeWidth, fieldScanlines };
     for (int i = 0; i < fieldScanlines; i++) //Where the active signal starts
@@ -403,14 +346,10 @@ FrameData SECAMSystem::Decode(SignalPack signal, int field, double crosstalk)
         }
     }
 
-    /*/
-    delete[] filtDbSignalI.signal;
-    delete[] filtDbSignalQ.signal;
-    delete[] filtDrSignalI.signal;
-    delete[] filtDrSignalQ.signal;
-    //*/
     delete[] DbSignal.signal;
     delete[] DrSignal.signal;
+    delete[] DbDecodedSignal.signal;
+    delete[] DrDecodedSignal.signal;
     delete[] newSignal.signal;
     delete[] finalSignal.signal;
     delete[] finalDbSignal.signal;
