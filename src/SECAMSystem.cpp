@@ -275,8 +275,8 @@ FrameData SECAMSystem::Decode(SignalPack signal, int field, double crosstalk)
         DrDecodedSignal.signal[i] = curDr;
         DbFreqShift = -(cos(DbDecodePhase) * DbDeriv) - (DbDecodeAngFreq * sin(DbDecodePhase) * DbSignal.signal[i]);
         DrFreqShift = -(cos(DrDecodePhase) * DrDeriv) - (DrDecodeAngFreq * sin(DrDecodePhase) * DrSignal.signal[i]);
-        DbDecodeAngFreq += 1.5 * (DbFreqShift - DbLastFreqShift);
-        DrDecodeAngFreq += 1.5 * (DrFreqShift - DrLastFreqShift);
+        DbDecodeAngFreq += 1.8 * (DbFreqShift - DbLastFreqShift);
+        DrDecodeAngFreq += 1.8 * (DrFreqShift - DrLastFreqShift);
         DbDecodePhase += sampleTime * DbDecodeAngFreq;
         DrDecodePhase += sampleTime * DrDecodeAngFreq;
         DbLastFreqShift = DbFreqShift;
